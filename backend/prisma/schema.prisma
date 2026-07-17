@@ -1,0 +1,1226 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  WAITER
+  CASHIER
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Staff {
+  id                  String              @id @default(uuid())
+  name                String
+  phone               String              @unique
+  role                Role
+  pinHash             String
+  mustChangePin       Boolean             @default(false)
+  status              StaffStatus         @default(ACTIVE)
+  failedAttempts      Int                 @default(0)
+  lockedUntil         DateTime?
+  lastLogin           DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  sessions            StaffSession[]
+  loginHistories      StaffLoginHistory[]
+  attendances         Attendance[]
+  ordersCreated       Order[]             @relation("CreatedByStaff")
+  orderStatusChanges  OrderStatusHistory[] @relation("ChangedByStaff")
+  paymentsReceived    Payment[]
+  stockTransactions   StockTransaction[]
+  expenses            Expense[]
+  purchasesCreated    Purchase[]
+  wastageEntries      WastageEntry[]
+  auditLogs           AuditLog[]
+  waiterCallsHandled  WaiterCall[]
+  resolvedConflicts   CustomerIdentityConflict[]
+  tagAssignments      CustomerTagAssignment[]
+  loyaltyTransactions  LoyaltyTransaction[]
+  approvedRedemptions  LoyaltyRedemptionRequest[] @relation("RedemptionApprovedBy")
+  rejectedRedemptions  LoyaltyRedemptionRequest[] @relation("RedemptionRejectedBy")
+  createdCoupons       Coupon[]
+  campaignsCreated     Campaign[]
+}
+
+model StaffSession {
+  id          String   @id @default(uuid())
+  staffId     String
+  token       String   @unique
+  expiredAt   DateTime
+  userAgent   String?
+  ipAddress   String?
+  isActive    Boolean  @default(true)
+  lastUsedAt  DateTime @default(now()) @updatedAt
+  createdAt   DateTime @default(now())
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model StaffLoginHistory {
+  id            String   @id @default(uuid())
+  staffId       String
+  status        String   // SUCCESS, FAILED
+  failureReason String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+  staff         Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model Attendance {
+  id        String    @id @default(uuid())
+  staffId   String
+  clockIn   DateTime  @default(now())
+  clockOut  DateTime?
+  duration  Int?      // in minutes
+  createdAt DateTime  @default(now())
+  staff     Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model RestaurantSettings {
+  id                       String   @id @default("default")
+  name                     String   @default("Cafe Cue & Brew")
+  logo                     String?
+  tagline                  String?
+  address                  String?
+  phone                    String?
+  whatsAppNumber           String?
+  email                    String?
+  openingTime              String   @default("09:00")
+  closingTime              String   @default("23:00")
+  currency                 String   @default("INR")
+  timezone                 String   @default("Asia/Kolkata")
+  
+  // Billing and Payment Settings
+  enableCash               Boolean  @default(true)
+  enableUpi                Boolean  @default(true)
+  enableCard               Boolean  @default(true)
+  enableCredit             Boolean  @default(true)
+  upiId                    String?
+  upiQrImage               String?
+  enableRoundOff           Boolean  @default(true)
+  enableServiceCharge      Boolean  @default(false)
+  serviceChargePercentage  Decimal  @default(0.0) @db.Decimal(5, 2)
+  invoicePrefix            String   @default("CCB")
+  
+  // Tax and GST Settings
+  enableGst                Boolean  @default(false)
+  gstPercentage            Decimal  @default(5.0) @db.Decimal(5, 2)
+  cgstPercentage           Decimal  @default(2.5) @db.Decimal(5, 2)
+  sgstPercentage           Decimal  @default(2.5) @db.Decimal(5, 2)
+  gstin                    String?
+  taxInclusivePricing      Boolean  @default(true)
+  
+  // Night Charges Settings
+  enableNightCharges       Boolean  @default(false)
+  nightStart               String   @default("23:00")
+  nightEnd                 String   @default("05:00")
+  nightChargeType          String   @default("FLAT") // FLAT or PERCENTAGE
+  nightChargeValue         Decimal  @default(0.0) @db.Decimal(10, 2)
+  
+  // Discount Limit Settings
+  cashierMaxDiscountPercent Decimal  @default(10.00) @db.Decimal(5, 2)
+  managerMaxDiscountPercent Decimal  @default(25.00) @db.Decimal(5, 2)
+  managerCanViewFinancialAnalytics Boolean  @default(false)
+  managerCanViewFinancialReports   Boolean  @default(false)
+  
+  // Order Settings
+  qrOrderingEnabled        Boolean  @default(true)
+  requireCustomerName      Boolean  @default(true)
+  requireCustomerPhone     Boolean  @default(true)
+  manualAcceptQrOrders     Boolean  @default(true)
+  allowCustomerNotes       Boolean  @default(true)
+  allowAddons              Boolean  @default(true)
+  allowCustomerCancellation Boolean @default(false)
+  customerCancellationTimeLimit Int @default(120) // in seconds
+  trackOrderTimeline       Boolean  @default(true)
+  trackStaffActions        Boolean  @default(true)
+  trackCancellationReasons Boolean  @default(true)
+  trackOrderSource         Boolean  @default(true)
+
+  // Digital Menu settings
+  enableQrMenu             Boolean  @default(true)
+  showOfferCarousel        Boolean  @default(true)
+  carouselRotationSeconds  Int      @default(5)
+  showPopularItems         Boolean  @default(true)
+  showBestSellers          Boolean  @default(true)
+  showRecommendedItems     Boolean  @default(true)
+  showPreparationTime      Boolean  @default(true)
+  showVegNonVeg            Boolean  @default(true)
+  showUnavailableItems     Boolean  @default(true)
+  enableCallWaiter         Boolean  @default(true)
+  
+  // Security settings
+  pinLength                Int      @default(4) // 4 or 6
+  sessionTimeout           Int      @default(720) // in minutes (12 hours)
+  maxFailedAttempts        Int      @default(5)
+  accountLockDuration      Int      @default(15) // in minutes
+  trackLoginHistory        Boolean  @default(true)
+  trackStaffActivity       Boolean  @default(true)
+  
+  // Notifications settings
+  enableNewOrderSound      Boolean  @default(true)
+  enableWaiterCallSound    Boolean  @default(true)
+  enableLowStockAlerts     Boolean  @default(true)
+  newOrderPollInterval     Int      @default(3) // seconds
+  waiterCallPollInterval   Int      @default(3) // seconds
+  customerOrderStatusPollInterval Int @default(5) // seconds
+  ownerDashboardRefreshInterval Int  @default(15) // seconds
+  // Inventory settings settings
+  allowNegativeStock          Boolean  @default(true)
+  managerCanManageInventory   Boolean  @default(true)
+  managerCanViewInventoryCost Boolean  @default(false)
+  managerCanManageExpenses    Boolean  @default(false)
+  managerCanViewProfitEstimate Boolean  @default(false)
+  
+  // CRM settings
+  managerCanViewCustomerCRM   Boolean  @default(false)
+  managerCanManageCustomerCRM Boolean  @default(false)
+  newCustomerWindowDays       Int      @default(30)
+  regularCustomerVisitThreshold Int    @default(3)
+  vipCustomerSpendThreshold   Decimal  @default(10000.00) @db.Decimal(10, 2)
+  highSpenderAverageSpendThreshold Decimal @default(1000.00) @db.Decimal(10, 2)
+  atRiskDays                  Int      @default(30)
+  inactiveDays                Int      @default(60)
+
+  // Loyalty settings
+  enableLoyalty                         Boolean  @default(false)
+  loyaltySpendAmount                    Decimal  @default(100.0) @db.Decimal(10, 2)
+  loyaltyPointsEarned                   Int      @default(1)
+  loyaltyRedemptionPoints               Int      @default(10)
+  loyaltyRedemptionValue                Decimal  @default(10.0) @db.Decimal(10, 2)
+  loyaltyMinimumRedeemPoints            Int      @default(10)
+  loyaltyMaximumRedeemPercent           Decimal  @default(100.0) @db.Decimal(5, 2)
+  loyaltyRedemptionRequestExpiryMinutes Int      @default(10)
+  managerCanAdjustLoyaltyPoints         Boolean  @default(false)
+  managerCanApproveLoyaltyRedemption   Boolean  @default(true)
+  managerCanManageCoupons               Boolean  @default(false)
+
+  updatedAt                DateTime @updatedAt
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+}
+
+model RestaurantTable {
+  id          String         @id @default(uuid())
+  tableNumber String         @unique
+  capacity    Int            @default(4)
+  status      TableStatus    @default(AVAILABLE)
+  isActive    Boolean        @default(true)
+  orders      Order[]
+  waiterCalls WaiterCall[]
+  qrToken     TableQrToken?
+  
+  @@index([isActive])
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String     @unique
+  image        String?
+  displayOrder Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  menuItems    MenuItem[]
+  banners      Banner[]
+}
+
+model MenuItem {
+  id              String            @id @default(uuid())
+  name            String            @unique
+  description     String?           @db.Text
+  categoryId      String
+  image           String?
+  basePrice       Decimal           @db.Decimal(10, 2)
+  isVeg           Boolean           @default(true)
+  available       Boolean           @default(true)
+  popular         Boolean           @default(false)
+  recommended     Boolean           @default(false)
+  bestSeller      Boolean           @default(false)
+  prepTime        Int?              // in minutes
+  displayOrder    Int               @default(0)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  category        Category          @relation(fields: [categoryId], references: [id])
+  variants        MenuVariant[]
+  menuItemAddons  MenuItemAddon[]
+  orderItems      OrderItem[]
+  recipes         Recipe[]
+  banners         Banner[]
+
+  @@index([categoryId])
+  @@index([available])
+}
+
+model MenuVariant {
+  id         String      @id @default(uuid())
+  menuItemId String
+  name       String      // e.g. "Small", "Regular"
+  price      Decimal     @db.Decimal(10, 2)
+  isActive   Boolean     @default(true)
+  menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  recipes    Recipe[]
+  orderItems OrderItem[]
+  
+  @@unique([menuItemId, name])
+}
+
+model Addon {
+  id             String          @id @default(uuid())
+  name           String          @unique
+  price          Decimal         @db.Decimal(10, 2)
+  isActive       Boolean         @default(true)
+  menuItemAddons MenuItemAddon[]
+  recipes        Recipe[]
+}
+
+model MenuItemAddon {
+  menuItemId String
+  addonId    String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  addon      Addon    @relation(fields: [addonId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, addonId])
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum MarketingConsentSource {
+  QR_CHECKOUT
+  CUSTOMER_VERIFIED_PROFILE
+  POS_STAFF_CAPTURE
+  IMPORT
+}
+
+enum CustomerIdentityConflictStatus {
+  PENDING
+  RESOLVED
+  IGNORED
+}
+
+model Customer {
+  id                     String                        @id @default(uuid())
+  name                   String
+  phone                  String                        @unique // Normalized E.164
+  email                  String?
+  birthday               DateTime?
+  anniversary            DateTime?
+  marketingConsent       Boolean                       @default(false)
+  marketingConsentAt     DateTime?
+  marketingConsentSource MarketingConsentSource?
+  marketingOptOutAt      DateTime?
+  loyaltyPoints          Int                           @default(0)
+  notes                  String?                       @db.Text
+  status                 CustomerStatus                @default(ACTIVE)
+  whatsappConsent        Boolean                       @default(true)
+  emailConsent           Boolean                       @default(true)
+  whatsappOptOutAt       DateTime?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  
+  orders                 Order[]
+  couponUsages           CouponUsage[]
+  tagAssignments         CustomerTagAssignment[]
+  identityConflicts      CustomerIdentityConflictMember[]
+  loyaltyTransactions    LoyaltyTransaction[]
+  loyaltyRedemptionRequests LoyaltyRedemptionRequest[]
+  customerCouponUsageCounters CustomerCouponUsageCounter[]
+  queueJobs              MarketingQueueJob[]
+  deliveryLogs           CampaignDeliveryLog[]
+
+  // Deprecated legacy counters (retained for reconciliation, do not use as source of truth)
+  visitCount             Int                           @default(0)
+  totalSpending          Decimal                       @default(0.0) @db.Decimal(12, 2)
+
+  @@index([marketingConsent])
+  @@index([status])
+}
+
+model CustomerIdentityConflict {
+  id                   String                         @id @default(uuid())
+  normalizedPhone      String
+  status               CustomerIdentityConflictStatus @default(PENDING)
+  reason               String?                        @db.Text
+  resolvedAt           DateTime?
+  resolvedByStaffId    String?
+  resolutionNote       String?                        @db.Text
+  createdAt            DateTime                       @default(now())
+  updatedAt            DateTime                       @updatedAt
+  
+  members              CustomerIdentityConflictMember[]
+  resolvedBy           Staff?                         @relation(fields: [resolvedByStaffId], references: [id])
+
+  @@index([normalizedPhone])
+  @@index([status])
+}
+
+model CustomerIdentityConflictMember {
+  conflictId    String
+  customerId    String
+  originalPhone String
+  createdAt     DateTime                 @default(now())
+  
+  conflict      CustomerIdentityConflict @relation(fields: [conflictId], references: [id], onDelete: Cascade)
+  customer      Customer                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([conflictId, customerId])
+}
+
+model CustomerTag {
+  id          String                  @id @default(uuid())
+  name        String                  @unique
+  description String?                 @db.Text
+  isActive    Boolean                 @default(true)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  assignments CustomerTagAssignment[]
+}
+
+model CustomerTagAssignment {
+  customerId   String
+  tagId        String
+  assignedById String
+  assignedAt   DateTime               @default(now())
+  
+  customer     Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tag          CustomerTag            @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  assignedBy   Staff                  @relation(fields: [assignedById], references: [id])
+
+  @@id([customerId, tagId])
+  @@index([customerId])
+  @@index([tagId])
+}
+
+enum OrderSource {
+  QR
+  OWNER_POS
+  MANAGER
+  WAITER
+  CASHIER
+}
+
+enum OrderStatus {
+  RECEIVED
+  ACCEPTED
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  CANCELLED
+  VOIDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+}
+
+model Order {
+  id                    String               @id @default(uuid())
+  orderNumber           String               @unique
+  publicTrackingToken   String               @unique
+  idempotencyKey        String?              @unique
+  customerId            String?
+  tableId               String?
+  tableNumberSnapshot   String?
+  source                OrderSource
+  status                OrderStatus          @default(RECEIVED)
+  paymentStatus         PaymentStatus        @default(UNPAID)
+  subtotal              Decimal              @db.Decimal(10, 2)
+  discount              Decimal              @default(0.0) @db.Decimal(10, 2)
+  couponDiscount        Decimal              @default(0.0) @db.Decimal(10, 2)
+  taxableAmount         Decimal              @db.Decimal(10, 2)
+  cgst                  Decimal              @default(0.0) @db.Decimal(10, 2)
+  sgst                  Decimal              @default(0.0) @db.Decimal(10, 2)
+  serviceCharge         Decimal              @default(0.0) @db.Decimal(10, 2)
+  nightCharge           Decimal              @default(0.0) @db.Decimal(10, 2)
+  roundOff              Decimal              @default(0.0) @db.Decimal(5, 2)
+  grandTotal            Decimal              @db.Decimal(10, 2)
+  couponCode            String?
+  createdById           String?              // Staff ID if manual
+  notes                 String?              @db.Text
+  inventoryDeducted     Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  
+  // Cancellation details
+  cancellationReason    String?
+  cancelledById         String?
+  cancelledAt           DateTime?
+
+  customer              Customer?            @relation(fields: [customerId], references: [id])
+  table                 RestaurantTable?     @relation(fields: [tableId], references: [id])
+  createdBy             Staff?               @relation("CreatedByStaff", fields: [createdById], references: [id])
+  items                 OrderItem[]
+  statusHistory         OrderStatusHistory[]
+  bills                 Bill[]
+  payments              Payment[]
+  couponUsages          CouponUsage[]
+  stockConsumption       OrderStockConsumption?
+  stockConsumptionReversal OrderStockConsumptionReversal?
+  loyaltyTransactions   LoyaltyTransaction[]
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([tableId])
+  @@index([customerId])
+  @@index([source])
+  @@index([paymentStatus])
+}
+
+model OrderItem {
+  id                  String               @id @default(uuid())
+  orderId             String
+  menuItemId          String
+  nameSnapshot        String
+  variantId           String?
+  variantNameSnapshot String?
+  priceSnapshot       Decimal              @db.Decimal(10, 2)
+  variantPriceSnapshot Decimal?            @db.Decimal(10, 2)
+  discountSnapshot    Decimal              @default(0.0) @db.Decimal(10, 2)
+  quantity            Int
+  notes               String?
+  totalPrice          Decimal              @db.Decimal(10, 2)
+  order               Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem            MenuItem             @relation(fields: [menuItemId], references: [id])
+  variant             MenuVariant?         @relation(fields: [variantId], references: [id])
+  addons              OrderItemAddon[]
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model OrderItemAddon {
+  id            String    @id @default(uuid())
+  orderItemId   String
+  addonId       String
+  nameSnapshot  String
+  priceSnapshot Decimal   @db.Decimal(10, 2)
+  orderItem     OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+}
+
+model OrderStatusHistory {
+  id           String      @id @default(uuid())
+  orderId      String
+  oldStatus    OrderStatus?
+  newStatus    OrderStatus
+  changedById  String?
+  changedAt    DateTime    @default(now())
+  notes        String?     @db.Text
+  order        Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy    Staff?      @relation("ChangedByStaff", fields: [changedById], references: [id])
+
+  @@index([orderId])
+  @@index([changedAt])
+}
+
+model Bill {
+  id                      String              @id @default(uuid())
+  invoiceNumber           String?             @unique // null in DRAFT, assigned when FINALIZED
+  orderId                 String
+  status                  BillStatus          @default(DRAFT)
+  paymentStatus           PaymentStatus       @default(UNPAID)
+  subtotal                Decimal             @db.Decimal(10, 2)
+  discount                Decimal             @default(0.0) @db.Decimal(10, 2) // total discount applied (manual + coupon)
+  itemDiscount            Decimal             @default(0.0) @db.Decimal(10, 2)
+  couponDiscount          Decimal             @default(0.0) @db.Decimal(10, 2)
+  manualDiscount          Decimal             @default(0.0) @db.Decimal(10, 2)
+  totalDiscount           Decimal             @default(0.0) @db.Decimal(10, 2)
+  manualDiscountType      String?             // FLAT or PERCENTAGE
+  manualDiscountValue     Decimal?            @db.Decimal(10, 2)
+  manualDiscountReason    String?             @db.Text
+  manualDiscountAppliedBy String?             // Staff ID / name
+  taxableAmount           Decimal             @db.Decimal(10, 2)
+  cgst                    Decimal             @default(0.0) @db.Decimal(10, 2)
+  sgst                    Decimal             @default(0.0) @db.Decimal(10, 2)
+  serviceCharge           Decimal             @default(0.0) @db.Decimal(10, 2)
+  nightCharge             Decimal             @default(0.0) @db.Decimal(10, 2)
+  preRoundGrandTotal      Decimal             @default(0.0) @db.Decimal(10, 2)
+  roundOff                Decimal             @default(0.0) @db.Decimal(5, 2)
+  grandTotal              Decimal             @db.Decimal(10, 2)
+  
+  // Tax rate snapshots
+  gstRateSnapshot         Decimal             @default(5.0) @db.Decimal(5, 2)
+  cgstRateSnapshot        Decimal             @default(2.5) @db.Decimal(5, 2)
+  sgstRateSnapshot        Decimal             @default(2.5) @db.Decimal(5, 2)
+  taxInclusiveSnapshot    Boolean             @default(true)
+  
+  // Charge snapshots
+  serviceChargeRateSnapshot Decimal           @default(0.0) @db.Decimal(5, 2)
+  nightChargeTypeSnapshot   String?           // FLAT or PERCENTAGE
+  nightChargeValueSnapshot  Decimal?          @db.Decimal(10, 2)
+  
+  loyaltyDiscount           Decimal             @default(0.0) @db.Decimal(10, 2)
+  loyaltyEligibleAmount     Decimal             @default(0.0) @db.Decimal(10, 2)
+  activeRedemptionRequestId String?             @unique
+  appliedCouponId           String?
+  appliedCouponCode         String?
+
+  financialVersion        Int                 @default(0)
+  finalizedAt             DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  order                   Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payments                Payment[]
+  activeRedemptionRequest LoyaltyRedemptionRequest? @relation("BillActiveRedemptionRequest", fields: [activeRedemptionRequestId], references: [id], onDelete: SetNull)
+  loyaltyTransactions     LoyaltyTransaction[]
+  loyaltyRedemptionRequests LoyaltyRedemptionRequest[] @relation("BillRedemptionRequests")
+  couponUsage             CouponUsage?
+
+  @@index([finalizedAt])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  CREDIT
+  SPLIT
+}
+
+enum PaymentStatusDetail {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model Payment {
+  id                    String              @id @default(uuid())
+  orderId               String
+  billId                String?
+  method                PaymentMethod
+  amount                Decimal             @db.Decimal(10, 2)
+  amountTendered        Decimal?            @db.Decimal(10, 2) // Cash tendered
+  changeDue             Decimal?            @db.Decimal(10, 2) // Cash change due
+  reference             String?
+  status                PaymentStatusDetail @default(COMPLETED)
+  isSettled             Boolean             @default(true) // false for CREDIT
+  paidAt                DateTime            @default(now())
+  receivedById          String
+  paymentIdempotencyKey String?             @unique
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  order                 Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bill                  Bill?               @relation(fields: [billId], references: [id])
+  receivedBy            Staff               @relation(fields: [receivedById], references: [id])
+  splitPayments         SplitPayment[]
+
+  @@index([orderId])
+  @@index([billId])
+  @@index([paidAt])
+  @@index([method])
+  @@index([isSettled])
+}
+
+model SplitPayment {
+  id        String        @id @default(uuid())
+  paymentId String
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(10, 2)
+  reference String?
+  payment   Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+enum CouponType {
+  FLAT
+  PERCENTAGE
+  BIRTHDAY
+  FESTIVAL
+}
+
+enum CouponUsageStatus {
+  ACTIVE
+  REVERSED
+}
+
+model Coupon {
+  id           String        @id @default(uuid())
+  code         String        @unique
+  type         CouponType
+  value        Decimal       @db.Decimal(10, 2)
+  minOrder     Decimal       @db.Decimal(10, 2)
+  maxDiscount  Decimal?      @db.Decimal(10, 2)
+  startDate    DateTime
+  endDate      DateTime
+  usageLimit   Int?
+  perCustLimit Int?          @default(1)
+  isActive     Boolean       @default(true)
+  couponUsages CouponUsage[]
+
+  // Phase 8C fields
+  name         String        @default("")
+  description  String?       @db.Text
+  usedCount    Int           @default(0)
+  createdByStaffId String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  createdBy    Staff?        @relation(fields: [createdByStaffId], references: [id])
+  customerCouponUsageCounters CustomerCouponUsageCounter[]
+  banners      Banner[]
+  campaigns    Campaign[]
+}
+
+model CouponUsage {
+  id                      String            @id @default(uuid())
+  couponId                String
+  orderId                 String
+  customerId              String?
+  billId                  String            @unique
+  couponCodeSnapshot      String
+  couponNameSnapshot      String
+  discountTypeSnapshot    CouponType
+  discountValueSnapshot   Decimal           @db.Decimal(10, 2)
+  maximumDiscountSnapshot Decimal?          @db.Decimal(10, 2)
+  appliedDiscountSnapshot Decimal           @db.Decimal(10, 2)
+  status                  CouponUsageStatus @default(ACTIVE)
+  createdAt               DateTime          @default(now())
+  reversedAt              DateTime?
+
+  coupon                  Coupon            @relation(fields: [couponId], references: [id])
+  order                   Order             @relation(fields: [orderId], references: [id])
+  customer                Customer?         @relation(fields: [customerId], references: [id])
+  bill                    Bill              @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([couponId])
+  @@index([customerId])
+  @@index([orderId])
+}
+
+enum BannerTargetAction {
+  COUPON
+  MENU_ITEM
+  CATEGORY
+  NONE
+}
+
+model Banner {
+  id               String             @id @default(uuid())
+  image            String
+  title            String
+  subtitle         String?
+  buttonText       String?
+  buttonAction     String?
+  startDate        DateTime
+  endDate          DateTime
+  priority         Int                @default(0)
+  isActive         Boolean            @default(true)
+
+  targetAction     BannerTargetAction @default(NONE)
+  targetCouponId   String?
+  targetMenuItemId String?
+  targetCategoryId String?
+
+  targetCoupon     Coupon?            @relation(fields: [targetCouponId], references: [id], onDelete: SetNull)
+  targetMenuItem   MenuItem?          @relation(fields: [targetMenuItemId], references: [id], onDelete: SetNull)
+  targetCategory   Category?          @relation(fields: [targetCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([targetCouponId])
+  @@index([targetMenuItemId])
+  @@index([targetCategoryId])
+}
+
+model CustomerCouponUsageCounter {
+  couponId    String
+  customerId  String
+  usageCount  Int      @default(0)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  coupon      Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, customerId])
+  @@index([couponId])
+  @@index([customerId])
+}
+
+enum WaiterCallStatus {
+  PENDING
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model WaiterCall {
+  id                  String           @id @default(uuid())
+  tableId             String
+  tableNumberSnapshot String
+  requestedAt         DateTime         @default(now())
+  status              WaiterCallStatus @default(PENDING)
+  handledById         String?
+  handledAt           DateTime?
+  acknowledgedAt      DateTime?
+  resolvedAt          DateTime?
+  table               RestaurantTable  @relation(fields: [tableId], references: [id])
+  handledBy           Staff?           @relation(fields: [handledById], references: [id])
+
+  @@index([requestedAt])
+  @@index([status])
+}
+
+model Ingredient {
+  id                  String             @id @default(uuid())
+  name                String             @unique
+  sku                 String?            @unique
+  unit                String             // Base Stock Unit (PCS, GM, ML, etc.)
+  category            String             @default("OTHER") // DAIRY, VEGETABLE, etc.
+  currentStock        Decimal            @default(0.0) @db.Decimal(12, 3)
+  minimumStock        Decimal            @default(0.0) @db.Decimal(12, 3)
+  reorderLevel        Decimal            @default(0.0) @db.Decimal(12, 3)
+  lastPurchaseCost    Decimal            @default(0.0) @db.Decimal(10, 2)
+  averageCost         Decimal            @default(0.0) @db.Decimal(10, 2)
+  isActive            Boolean            @default(true)
+  preferredSupplierId String?
+  preferredSupplier   Supplier?          @relation(fields: [preferredSupplierId], references: [id])
+  recipes             Recipe[]
+  stockTransactions   StockTransaction[]
+  purchaseItems       PurchaseItem[]
+  wastageEntries      WastageEntry[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([preferredSupplierId])
+}
+
+model Recipe {
+  id           String       @id @default(uuid())
+  menuItemId   String?
+  variantId    String?
+  addonId      String?
+  ingredientId String
+  quantity     Decimal      @db.Decimal(12, 3) // In Ingredient BASE unit
+  menuItem     MenuItem?    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  variant      MenuVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  addon        Addon?       @relation(fields: [addonId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, ingredientId])
+  @@unique([variantId, ingredientId])
+  @@unique([addonId, ingredientId])
+  @@index([menuItemId])
+  @@index([variantId])
+  @@index([addonId])
+  @@index([ingredientId])
+}
+
+enum StockTxType {
+  OPENING_STOCK
+  PURCHASE
+  PURCHASE_REVERSAL
+  RECIPE_CONSUMPTION
+  CONSUMPTION_REVERSAL
+  WASTAGE
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  STOCK_COUNT_VARIANCE
+}
+
+model StockTransaction {
+  id                         String            @id @default(uuid())
+  ingredientId               String
+  type                       StockTxType
+  quantityChange             Decimal           @db.Decimal(12, 3)
+  unitCostSnapshot           Decimal           @default(0.0) @db.Decimal(10, 2)
+  totalCostSnapshot          Decimal           @default(0.0) @db.Decimal(10, 2)
+  balanceBefore              Decimal           @default(0.0) @db.Decimal(12, 3)
+  balanceAfter               Decimal           @default(0.0) @db.Decimal(12, 3)
+  averageCostBefore          Decimal           @default(0.0) @db.Decimal(10, 2)
+  averageCostAfter           Decimal           @default(0.0) @db.Decimal(10, 2)
+  referenceType              String?           // e.g. "PURCHASE", "ORDER", "WASTAGE"
+  referenceId                String?
+  reason                     String?           @db.Text
+  changedById                String
+  createdAt                  DateTime          @default(now())
+  ingredient                 Ingredient        @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  changedBy                  Staff             @relation(fields: [changedById], references: [id])
+  reversesStockTransactionId String?           @unique
+  reversesStockTransaction   StockTransaction? @relation("TransactionReversal", fields: [reversesStockTransactionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reversedByTransaction      StockTransaction? @relation("TransactionReversal")
+
+  @@index([ingredientId])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model Expense {
+  id              String   @id @default(uuid())
+  expenseDate     DateTime
+  category        String   // RENT, ELECTRICITY, GAS, WATER, SALARY, etc.
+  title           String   // Custom description/title
+  amount          Decimal  @db.Decimal(10, 2)
+  paymentMethod   String?  // CASH, UPI, CARD, etc.
+  referenceNumber String?
+  status          String   @default("ACTIVE") // ACTIVE, VOIDED
+  voidReason      String?  @db.Text
+  notes           String?  @db.Text
+  createdById     String
+  createdAt       DateTime @default(now())
+  createdBy       Staff    @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@index([expenseDate])
+}
+
+model Supplier {
+  id            String       @id @default(uuid())
+  name          String
+  contactPerson String?
+  phone         String
+  email         String?
+  gstin         String?
+  address       String?      @db.Text
+  notes         String?      @db.Text
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  ingredients   Ingredient[]
+  purchases     Purchase[]
+}
+
+model Purchase {
+  id             String         @id @default(uuid())
+  purchaseNumber String         @unique // e.g. PUR-YYYYMMDD-XXXX
+  supplierId     String
+  invoiceNumber  String?
+  invoiceDate    DateTime?
+  purchaseDate   DateTime       @default(now())
+  status         PurchaseStatus @default(DRAFT)
+  subtotal       Decimal        @db.Decimal(10, 2)
+  discount       Decimal        @default(0.0) @db.Decimal(10, 2)
+  tax            Decimal        @default(0.0) @db.Decimal(10, 2)
+  otherCharges   Decimal        @default(0.0) @db.Decimal(10, 2)
+  grandTotal     Decimal        @db.Decimal(10, 2)
+  notes          String?        @db.Text
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  supplier       Supplier       @relation(fields: [supplierId], references: [id])
+  createdBy      Staff          @relation(fields: [createdById], references: [id])
+  items          PurchaseItem[]
+}
+
+model PurchaseItem {
+  id                     String     @id @default(uuid())
+  purchaseId             String
+  ingredientId           String
+  ingredientNameSnapshot String
+  purchaseUnit           String     // KG, LTR, BOX, etc.
+  purchaseQuantity       Decimal    @db.Decimal(12, 3)
+  conversionFactor       Decimal    @db.Decimal(12, 3)
+  baseQuantityAdded      Decimal    @db.Decimal(12, 3)
+  unitPurchaseCost       Decimal    @db.Decimal(10, 2)
+  baseUnitCostSnapshot   Decimal    @db.Decimal(12, 4)
+  tax                    Decimal    @default(0.0) @db.Decimal(10, 2)
+  lineTotal              Decimal    @db.Decimal(10, 2)
+  purchase               Purchase   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ingredient             Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@index([purchaseId])
+  @@index([ingredientId])
+}
+
+model WastageEntry {
+  id           String     @id @default(uuid())
+  ingredientId String
+  quantity     Decimal    @db.Decimal(12, 3)
+  reason       String     // EXPIRED, SPOILED, SPILLED, BURNT, etc.
+  notes        String?    @db.Text
+  recordedById String
+  recordedAt   DateTime   @default(now())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  recordedBy   Staff      @relation(fields: [recordedById], references: [id])
+
+  @@index([ingredientId])
+  @@index([recordedById])
+}
+
+model OrderStockConsumption {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  consumedAt DateTime @default(now())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+}
+
+model OrderStockConsumptionReversal {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  reversedAt DateTime @default(now())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // NEW_ORDER, WAITER_CALL, LOW_STOCK
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  staffId    String
+  action     String   // LOGIN, LOGOUT, ORDER_CANCEL, etc.
+  entityType String?
+  entityId   String?
+  oldData    String?  @db.Text // JSON string
+  newData    String?  @db.Text // JSON string
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  staff      Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+}
+
+model TableQrToken {
+  id        String          @id @default(uuid())
+  tableId   String          @unique
+  token     String          @unique
+  createdAt DateTime        @default(now())
+  table     RestaurantTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+enum BillStatus {
+  DRAFT
+  FINALIZED
+  PAID
+  VOIDED
+}
+
+model InvoiceSequence {
+  id         String   @id @default(uuid())
+  year       Int
+  prefix     String
+  lastNumber Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([year, prefix])
+}
+
+enum PurchaseStatus {
+  DRAFT
+  FINALIZED
+  CANCELLED
+}
+
+enum LoyaltyTransactionType {
+  EARN
+  REDEEM
+  EARN_REVERSAL
+  REDEMPTION_REVERSAL
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  EXPIRE
+}
+
+enum LoyaltyRedemptionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+model LoyaltyTransaction {
+  id                      String                 @id @default(uuid())
+  customerId              String
+  type                    LoyaltyTransactionType
+  pointsChange            Int
+  balanceAfter            Int
+  billId                  String?
+  orderId                 String?
+  redemptionRequestId     String?
+  referenceType           String?
+  referenceId             String?
+  reason                  String?                @db.Text
+  eligibleAmountSnapshot  Decimal?               @db.Decimal(10, 2)
+  earnSpendAmountSnapshot Decimal?               @db.Decimal(10, 2)
+  earnPointsSnapshot      Int?
+  redemptionValueSnapshot Decimal?               @db.Decimal(10, 2)
+  redemptionPointsSnapshot Int?
+  idempotencyKey          String                 @unique
+  createdByStaffId        String?
+  createdAt               DateTime               @default(now())
+
+  customer                Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  bill                    Bill?                  @relation(fields: [billId], references: [id], onDelete: SetNull)
+  order                   Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  redemptionRequest       LoyaltyRedemptionRequest? @relation(fields: [redemptionRequestId], references: [id], onDelete: SetNull)
+  createdBy               Staff?                 @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([customerId, createdAt])
+  @@index([billId])
+  @@index([orderId])
+  @@index([type, createdAt])
+}
+
+model LoyaltyRedemptionRequest {
+  id                  String                         @id @default(uuid())
+  billId              String
+  customerId          String
+  requestedPoints     Int
+  approvedPoints      Int?
+  status              LoyaltyRedemptionRequestStatus
+  expiresAt           DateTime?
+  expiredAt           DateTime?
+  approvedAt          DateTime?
+  approvedByStaffId   String?
+  rejectedAt          DateTime?
+  rejectedByStaffId   String?
+  cancelledAt         DateTime?
+  createdAt           DateTime                       @default(now())
+  updatedAt           DateTime                       @updatedAt
+
+  bill                Bill                           @relation("BillRedemptionRequests", fields: [billId], references: [id], onDelete: Cascade)
+  customer            Customer                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  approvedBy          Staff?                         @relation("RedemptionApprovedBy", fields: [approvedByStaffId], references: [id], onDelete: SetNull)
+  rejectedBy          Staff?                         @relation("RedemptionRejectedBy", fields: [rejectedByStaffId], references: [id], onDelete: SetNull)
+  activeBill          Bill?                          @relation("BillActiveRedemptionRequest")
+  loyaltyTransactions LoyaltyTransaction[]
+
+  @@index([billId])
+  @@index([customerId])
+  @@index([status])
+}
+
+enum CampaignType {
+  WHATSAPP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum QueueJobStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  BOUNCED
+}
+
+model Campaign {
+  id                String                @id @default(uuid())
+  name              String
+  type              CampaignType
+  status            CampaignStatus        @default(DRAFT)
+  templateId        String
+  templateVariables Json?
+  targetSegmentRule Json
+  couponId          String?
+  scheduledAt       DateTime
+  createdByStaffId  String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  coupon            Coupon?               @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  createdBy         Staff                 @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
+  queueJobs         MarketingQueueJob[]
+  deliveryLogs      CampaignDeliveryLog[]
+
+  @@index([status])
+  @@index([scheduledAt, status])
+  @@index([couponId])
+  @@index([createdByStaffId])
+}
+
+model CampaignTemplate {
+  id                 String       @id @default(uuid())
+  externalIdentifier String       @unique
+  type               CampaignType
+  name               String
+  contentPattern     String       @db.Text
+  variableSpecs      Json
+  language           String       @default("en")
+  isActive           Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([isActive, type])
+}
+
+model MarketingQueueJob {
+  id               String         @id @default(uuid())
+  campaignId       String
+  customerId       String?
+  recipientAddress String
+  payload          Json
+  status           QueueJobStatus @default(PENDING)
+  attempts         Int            @default(0)
+  runAfter         DateTime       @default(now())
+  lockedAt         DateTime?
+  errorLog         String?        @db.Text
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer         Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([status, runAfter, attempts])
+  @@index([status, lockedAt])
+  @@index([campaignId])
+  @@index([customerId])
+}
+
+model CampaignDeliveryLog {
+  id               String         @id @default(uuid())
+  campaignId       String
+  customerId       String?
+  recipientAddress String
+  messageSid       String?        @unique
+  status           DeliveryStatus @default(QUEUED)
+  errorCode        String?
+  sentAt           DateTime?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  createdAt        DateTime       @default(now())
+
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  customer         Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+  @@index([customerId])
+  @@index([createdAt])
+}
+
