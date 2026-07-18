@@ -48,6 +48,7 @@ export class StaffService {
       await seedDatabaseIfEmpty(this.prisma);
     } catch (seedErr) {
       console.error('Failed to run lazy database seeding:', seedErr);
+      throw new Error(`Lazy database seeding failed: ${seedErr.message || seedErr}`);
     }
 
     const staffList = await this.prisma.staff.findMany({
