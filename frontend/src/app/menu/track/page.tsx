@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 
 // Base API URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface OrderItemAddon {
   id: string;

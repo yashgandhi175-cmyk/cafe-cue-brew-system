@@ -395,7 +395,7 @@ export default function InventoryPage() {
   });
 
   const handleExport = (type: 'ledger' | 'stock-balance' | 'wastage') => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
     const token = localStorage.getItem('ccb_token');
     if (!token) return;
     window.open(`${baseUrl}/inventory/export/${type}?token=${token}`, '_blank');

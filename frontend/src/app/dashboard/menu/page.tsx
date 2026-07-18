@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, getImageUrl } from '@/lib/api';
 import { Utensils, Plus, Edit2, ToggleLeft, ToggleRight, Camera, Loader2, Search, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -491,7 +491,7 @@ export default function MenuPage() {
                       <div className="w-20 h-20 rounded-xl bg-[#FAF8F5] border border-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {item.image ? (
                           <img
-                            src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/${item.image}`}
+                            src={getImageUrl(item.image)}
                             alt={item.name}
                             className="w-full h-full object-cover"
                           />
@@ -869,7 +869,7 @@ export default function MenuPage() {
                   <div className="w-16 h-16 rounded-xl bg-[#FAF8F5] border border-[#EAD8C0]/35 flex items-center justify-center overflow-hidden relative">
                     {itemImagePath ? (
                       <img
-                        src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/${itemImagePath}`}
+                        src={getImageUrl(itemImagePath)}
                         alt="Preview"
                         className="w-full h-full object-cover"
                       />

@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, getImageUrl } from '@/lib/api';
 import { FolderTree, Plus, Edit2, ToggleLeft, ToggleRight, Camera, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -218,7 +218,7 @@ export default function CategoriesPage() {
                 <div className="w-16 h-16 rounded-xl bg-[#FAF8F5] border border-gray-100 flex items-center justify-center overflow-hidden">
                   {category.image ? (
                     <img
-                      src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/${category.image}`}
+                      src={getImageUrl(category.image)}
                       alt={category.name}
                       className="w-full h-full object-cover"
                     />
@@ -315,7 +315,7 @@ export default function CategoriesPage() {
                   <div className="w-16 h-16 rounded-xl bg-[#FAF8F5] border border-[#EAD8C0]/30 flex items-center justify-center overflow-hidden relative group">
                     {imagePath ? (
                       <img
-                        src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/${imagePath}`}
+                        src={getImageUrl(imagePath)}
                         alt="Preview"
                         className="w-full h-full object-cover"
                       />

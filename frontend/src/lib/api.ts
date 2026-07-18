@@ -9,6 +9,14 @@ export const api = axios.create({
   },
 });
 
+export const getImageUrl = (imagePath: string | null) => {
+  if (!imagePath) return '';
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : '/api');
+  const baseUrl = apiBase.endsWith('/api') ? apiBase.slice(0, -4) : apiBase;
+  return `${baseUrl}/${imagePath}`;
+};
+
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
   (config) => {
