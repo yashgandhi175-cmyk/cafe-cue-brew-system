@@ -5,8 +5,13 @@ import * as bcrypt from 'bcryptjs';
 export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
   // Automatically run prisma db push to ensure tables exist in the database
   try {
-    console.log('Ensuring database tables exist (running prisma db push)...');
-    execSync(`"${process.execPath}" node_modules/prisma/build/index.js db push`, {
+    const { join } = require('path');
+    const prodSchema = join(__dirname, 'prisma', 'schema.prisma');
+    const devSchema = join(process.cwd(), 'prisma', 'schema.prisma');
+    const schemaPath = require('fs').existsSync(prodSchema) ? prodSchema : devSchema;
+
+    console.log(`Ensuring database tables exist (using schema: ${schemaPath})...`);
+    execSync(`"${process.execPath}" node_modules/prisma/build/index.js db push --schema="${schemaPath}"`, {
       stdio: 'inherit',
       env: process.env,
     });
