@@ -59,6 +59,14 @@ import { join } from 'path';
           ),
           serveRoot: '/uploads',
         },
+        {
+          rootPath: (() => {
+            const prodPath = join(__dirname, 'client');
+            const devPath = join(process.cwd(), 'client');
+            return require('fs').existsSync(prodPath) ? prodPath : devPath;
+          })(),
+          exclude: ['/api*'],
+        },
       ],
     }),
   ],
