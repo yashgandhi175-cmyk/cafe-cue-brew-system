@@ -2,9 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import {
   ArrowLeft,
@@ -32,10 +32,17 @@ import {
   Cell
 } from 'recharts';
 
-export default function CampaignDetailPage() {
-  const { id } = useParams();
+function CampaignDetailContent() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get('id');
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) {
+      fetchAnalytics();
+    }
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -49,9 +56,9 @@ export default function CampaignDetailPage() {
     }
   };
 
-  useEffect(() => {
-    fetchAnalytics(); // eslint-disable-line react-hooks/set-state-in-effect
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!id) {
+    return <div className="p-10 text-center text-red-500">No campaign ID specified in the URL query.</div>;
+  }
 
   if (loading) {
     return <div className="p-10 text-center text-gray-500">Loading campaign analytics...</div>;
@@ -188,5 +195,13 @@ export default function CampaignDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CampaignDetailPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center text-gray-500">Loading campaign details...</div>}>
+      <CampaignDetailContent />
+    </Suspense>
   );
 }

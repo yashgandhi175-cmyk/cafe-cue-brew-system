@@ -287,7 +287,7 @@ export default function CampaignsPage() {
                     <td className="px-6 py-4">{new Date(c.scheduledAt).toLocaleString()}</td>
                     <td className="px-6 py-4">{c.createdBy?.name || 'System'}</td>
                     <td className="px-6 py-4 text-right">
-                      <Link href={`/dashboard/campaigns/${c.id}`} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50 text-gray-700">
+                      <Link href={`/dashboard/campaigns/detail?id=${c.id}`} className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-gray-300 bg-white px-3 py-1 hover:bg-gray-50 text-gray-700">
                         <Eye className="mr-1 h-3.5 w-3.5" /> View Analytics
                       </Link>
                     </td>
