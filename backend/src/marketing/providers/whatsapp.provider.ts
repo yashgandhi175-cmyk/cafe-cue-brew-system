@@ -38,22 +38,31 @@ export class WhatsAppProvider implements IMarketingProvider {
     const verifyToken = this.configService.get<string>('WHATSAPP_VERIFY_TOKEN');
     const appSecret = this.configService.get<string>('WHATSAPP_APP_SECRET');
 
+    console.log(`[WHATSAPP_DIAGNOSTIC] WHATSAPP_ACCESS_TOKEN: ${accessToken ? 'present' : 'missing'}`);
+    console.log(`[WHATSAPP_DIAGNOSTIC] WHATSAPP_PHONE_NUMBER_ID: ${phoneNumberId ? 'present' : 'missing'}`);
+    console.log(`[WHATSAPP_DIAGNOSTIC] WHATSAPP_VERIFY_TOKEN: ${verifyToken ? 'present' : 'missing'}`);
+    console.log(`[WHATSAPP_DIAGNOSTIC] WHATSAPP_APP_SECRET: ${appSecret ? 'present' : 'missing'}`);
+
     if (!accessToken) {
+      console.error('[WHATSAPP_DIAGNOSTIC] Missing WHATSAPP_ACCESS_TOKEN');
       throw new ProviderConfigurationException(
         'WHATSAPP_ACCESS_TOKEN is missing',
       );
     }
     if (!phoneNumberId) {
+      console.error('[WHATSAPP_DIAGNOSTIC] Missing WHATSAPP_PHONE_NUMBER_ID');
       throw new ProviderConfigurationException(
         'WHATSAPP_PHONE_NUMBER_ID is missing',
       );
     }
     if (!verifyToken) {
+      console.error('[WHATSAPP_DIAGNOSTIC] Missing WHATSAPP_VERIFY_TOKEN');
       throw new ProviderConfigurationException(
         'WHATSAPP_VERIFY_TOKEN is missing',
       );
     }
     if (!appSecret) {
+      console.error('[WHATSAPP_DIAGNOSTIC] Missing WHATSAPP_APP_SECRET');
       throw new ProviderConfigurationException(
         'WHATSAPP_APP_SECRET is missing',
       );
