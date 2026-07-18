@@ -2,7 +2,6 @@ import { PrismaClient, Role, StaffStatus, TableStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
-  console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] Immediately before prisma.staff.count()`);
   const staffCount = await prisma.staff.count();
   if (staffCount > 0) {
     return;

@@ -34,7 +34,6 @@ export class StaffController {
   async getPublicStaffList(): Promise<
     Array<{ id: string; name: string; role: Role }>
   > {
-    console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] StaffController.getPublicStaffList() entered`);
     const list = await this.staffService.findAll();
     return list
       .filter((s) => s.status === StaffStatus.ACTIVE)
