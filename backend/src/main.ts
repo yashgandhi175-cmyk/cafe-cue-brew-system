@@ -26,15 +26,13 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   // Automatically run database seeding if empty
-  const { PrismaClient } = await import('@prisma/client');
+  const { PrismaService } = await import('./common/prisma.service.js');
   const { seedDatabaseIfEmpty } = await import('./seed.js');
-  const prisma = new PrismaClient();
+  const prisma = app.get(PrismaService);
   try {
     await seedDatabaseIfEmpty(prisma);
   } catch (err) {
     console.error('Failed to run automatic database seeding:', err);
-  } finally {
-    await prisma.$disconnect();
   }
 
   const port = process.env.PORT || 3000;
