@@ -10,6 +10,15 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     const devSchema = join(process.cwd(), 'prisma', 'schema.prisma');
     const schemaPath = require('fs').existsSync(prodSchema) ? prodSchema : devSchema;
 
+    // Grant execute permissions to Prisma engines on Linux environments (e.g. Hostinger)
+    try {
+      console.log('Granting execute permissions to Prisma engines...');
+      execSync('chmod -R +x node_modules/@prisma/engines/', { stdio: 'inherit' });
+      console.log('Execute permissions granted.');
+    } catch (chmodErr) {
+      console.warn('Failed to grant execute permissions to Prisma engines:', chmodErr);
+    }
+
     console.log(`Ensuring database tables exist (using schema: ${schemaPath})...`);
     execSync(`"${process.execPath}" node_modules/prisma/build/index.js db push --schema="${schemaPath}"`, {
       stdio: 'inherit',
