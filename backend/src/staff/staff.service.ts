@@ -42,6 +42,14 @@ export class StaffService {
   }
 
   async findAll(): Promise<SanitizedStaff[]> {
+    // Lazily run database seeding if empty (inside request context, after fork!)
+    try {
+      const { seedDatabaseIfEmpty } = await import('../seed.js');
+      await seedDatabaseIfEmpty(this.prisma);
+    } catch (seedErr) {
+      console.error('Failed to run lazy database seeding:', seedErr);
+    }
+
     const staffList = await this.prisma.staff.findMany({
       orderBy: { createdAt: 'desc' },
     });

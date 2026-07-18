@@ -42,18 +42,7 @@ async function bootstrap() {
   // Set global prefix for all API controllers
   app.setGlobalPrefix('api');
 
-  // Automatically run database seeding if empty
-  const { PrismaService } = await import('./common/prisma.service.js');
-  const { seedDatabaseIfEmpty } = await import('./seed.js');
-  const prisma = app.get(PrismaService);
-  try {
-    console.log('Verifying database connection...');
-    await prisma.$queryRaw`SELECT 1`;
-    console.log('Database connection verified successfully.');
-    await seedDatabaseIfEmpty(prisma);
-  } catch (err) {
-    console.error('Database connection failed or not ready. Skipping automatic seeding:', err);
-  }
+
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

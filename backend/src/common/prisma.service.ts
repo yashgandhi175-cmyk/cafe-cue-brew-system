@@ -7,7 +7,7 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   async onModuleInit() {
-    await this.$connect();
+    // Let Prisma connect lazily on the first request context query to avoid pre-fork socket breakage
   }
 
   async onModuleDestroy() {
