@@ -65,7 +65,7 @@ import { join } from 'path';
             const devPath = join(process.cwd(), 'client');
             return require('fs').existsSync(prodPath) ? prodPath : devPath;
           })(),
-          exclude: ['/api*'],
+          exclude: ['/api/(.*)'],
         },
       ],
     }),

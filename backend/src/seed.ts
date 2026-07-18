@@ -1,7 +1,20 @@
+import { execSync } from 'child_process';
 import { PrismaClient, Role, StaffStatus, TableStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
+  // Automatically run prisma db push to ensure tables exist in the database
+  try {
+    console.log('Ensuring database tables exist (running prisma db push)...');
+    execSync('node node_modules/prisma/build/index.js db push', {
+      stdio: 'inherit',
+      env: process.env,
+    });
+    console.log('Database tables verified/created successfully.');
+  } catch (pushErr) {
+    console.error('Failed to run automatic database schema push:', pushErr);
+  }
+
   const staffCount = await prisma.staff.count();
   if (staffCount > 0) {
     return;
