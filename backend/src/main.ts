@@ -3,6 +3,25 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+process.on('uncaughtException', (err) => {
+  console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
+  if (err && err.stack) {
+    console.error(err.stack);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRITICAL UNHANDLED REJECTION:', reason);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM signal. Application is shutting down gracefully...');
+});
+
+process.on('exit', (code) => {
+  console.log(`Node process is exiting with code: ${code}`);
+});
+
 async function bootstrap() {
   // Sanitize and percent-encode DATABASE_URL password if it contains special characters (like '@')
   if (process.env.DATABASE_URL) {
