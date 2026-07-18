@@ -22,6 +22,21 @@ async function bootstrap() {
     }),
   );
 
+  // Set global prefix for all API controllers
+  app.setGlobalPrefix('api');
+
+  // Automatically run database seeding if empty
+  const { PrismaClient } = await import('@prisma/client');
+  const { seedDatabaseIfEmpty } = await import('./seed.js');
+  const prisma = new PrismaClient();
+  try {
+    await seedDatabaseIfEmpty(prisma);
+  } catch (err) {
+    console.error('Failed to run automatic database seeding:', err);
+  } finally {
+    await prisma.$disconnect();
+  }
+
   const port = configService.get<number>('PORT') || 3001;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
