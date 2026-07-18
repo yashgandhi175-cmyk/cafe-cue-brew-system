@@ -6,7 +6,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
   // Automatically run prisma db push to ensure tables exist in the database
   try {
     console.log('Ensuring database tables exist (running prisma db push)...');
-    execSync('node node_modules/prisma/build/index.js db push', {
+    execSync(`"${process.execPath}" node_modules/prisma/build/index.js db push`, {
       stdio: 'inherit',
       env: process.env,
     });
