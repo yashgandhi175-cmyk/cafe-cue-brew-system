@@ -40,7 +40,9 @@ async function bootstrap() {
     console.warn('WARNING: DATABASE_URL environment variable is not defined!');
   }
 
+  console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] Before NestFactory.create()`);
   const app = await NestFactory.create(AppModule);
+  console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] After NestFactory.create()`);
   const configService = app.get(ConfigService);
 
   // Enable CORS
@@ -64,7 +66,9 @@ async function bootstrap() {
 
 
   const port = process.env.PORT || 3000;
+  console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] Before app.listen()`);
   await app.listen(port);
+  console.log(`[${new Date().toISOString()}] [PRISMA_DIAGNOSTIC] After app.listen()`);
   console.log(`Application is running on: ${port}`);
 }
 void bootstrap();
