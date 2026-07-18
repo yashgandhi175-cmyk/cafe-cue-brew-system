@@ -11,8 +11,14 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       env: process.env,
     });
     console.log('Database tables verified/created successfully.');
-  } catch (pushErr) {
+  } catch (pushErr: any) {
     console.error('Failed to run automatic database schema push:', pushErr);
+    if (pushErr.stdout) {
+      console.error('Prisma stdout:', pushErr.stdout.toString());
+    }
+    if (pushErr.stderr) {
+      console.error('Prisma stderr:', pushErr.stderr.toString());
+    }
   }
 
   const staffCount = await prisma.staff.count();
