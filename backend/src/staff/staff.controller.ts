@@ -94,16 +94,6 @@ export class StaffController {
     return this.staffService.update(id, updateStaffDto);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.OWNER)
-  @Put(':id/pin')
-  async changePin(
-    @Param('id') id: string,
-    @Body() changePinDto: ChangeStaffPinDto,
-  ): Promise<{ message: string }> {
-    return this.staffService.changePin(id, changePinDto.newPin);
-  }
-
   @UseGuards(JwtAuthGuard)
   @Put('me/pin')
   @AllowDuringPinChange()
@@ -117,5 +107,15 @@ export class StaffController {
       updateOwnPinDto.newPin,
       updateOwnPinDto.confirmPin,
     );
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER)
+  @Put(':id/pin')
+  async changePin(
+    @Param('id') id: string,
+    @Body() changePinDto: ChangeStaffPinDto,
+  ): Promise<{ message: string }> {
+    return this.staffService.changePin(id, changePinDto.newPin);
   }
 }
