@@ -90,7 +90,7 @@ export default function BannersPage() {
   // Fetch Session
   const fetchSessionAndData = async () => {
     try {
-      const stored = localStorage.getItem('staff_session');
+      const stored = localStorage.getItem('ccb_staff');
       if (stored) {
         const parsed = JSON.parse(stored);
         setRole(parsed.role);
