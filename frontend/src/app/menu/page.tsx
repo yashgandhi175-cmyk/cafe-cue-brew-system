@@ -725,8 +725,127 @@ function MenuPageContent() {
         )}
       </div>
 
+      {/* Featured Recommendations Section (Only when no search query is active) */}
+      {!searchQuery && !selectedCategoryId && (
+        <>
+          {/* Featured Section */}
+          {menuItems.filter(item => item.recommended && item.available).length > 0 && (
+            <div className="py-4 border-b border-stone-100 bg-[#FAF8F5]/45">
+              <h3 className="px-4 text-xs font-black uppercase tracking-wider text-[#A0522D] mb-3 flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 fill-[#A0522D] text-[#A0522D]" />
+                Chef's Rooftop Specials
+              </h3>
+              <div className="flex gap-4 overflow-x-auto no-scrollbar px-4">
+                {menuItems.filter(item => item.recommended && item.available).map((item) => {
+                  const hasVariants = item.variants.filter((v) => v.isActive).length > 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-stone-200/60 p-3 rounded-2xl flex flex-col justify-between shadow-xs shrink-0 w-44 hover:shadow-md transition-shadow relative"
+                    >
+                      {/* Veg/Non-Veg Badge */}
+                      {settings?.showVegNonVeg && (
+                        <span
+                          className={`absolute top-3 left-3 w-4 h-4 border rounded-sm flex items-center justify-center p-0.5 z-10 bg-white ${
+                            item.isVeg ? 'border-emerald-600' : 'border-red-600'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-emerald-600' : 'bg-red-600'}`} />
+                        </span>
+                      )}
+                      
+                      <div className="w-full h-24 rounded-xl overflow-hidden bg-stone-100 relative mb-2">
+                        {item.image ? (
+                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[#5C3A21] bg-[#FAF8F5]">
+                            <Coffee className="w-6 h-6 opacity-35" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="min-w-0 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-bold text-xs text-[#5C3A21] truncate">{item.name}</h4>
+                          <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">{item.description || 'Cafe Special'}</p>
+                        </div>
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-[#A0522D] font-extrabold text-xs">
+                            ₹{hasVariants ? `${item.variants.filter((v) => v.isActive)[0].price}+` : item.basePrice}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => handleAddItemClick(item)}
+                            className="bg-[#FDFBF7] hover:bg-[#5C3A21]/5 text-[#A0522D] hover:text-[#5C3A21] border border-[#A0522D]/40 font-bold text-[10px] px-2.5 h-6 rounded-full flex items-center gap-0.5 shadow-sm shrink-0"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Popular Section */}
+          {menuItems.filter(item => item.popular && item.available).length > 0 && (
+            <div className="py-4 border-b border-stone-100">
+              <h3 className="px-4 text-xs font-black uppercase tracking-wider text-[#A0522D] mb-3 flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 fill-[#A0522D] text-[#A0522D]" />
+                Trending & Popular
+              </h3>
+              <div className="flex gap-4 overflow-x-auto no-scrollbar px-4">
+                {menuItems.filter(item => item.popular && item.available).map((item) => {
+                  const hasVariants = item.variants.filter((v) => v.isActive).length > 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white border border-stone-200/60 p-3 rounded-2xl flex flex-col justify-between shadow-xs shrink-0 w-36 hover:shadow-md transition-shadow relative"
+                    >
+                      {/* Veg/Non-Veg Badge */}
+                      {settings?.showVegNonVeg && (
+                        <span
+                          className={`absolute top-3 left-3 w-4 h-4 border rounded-sm flex items-center justify-center p-0.5 z-10 bg-white ${
+                            item.isVeg ? 'border-emerald-600' : 'border-red-600'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-emerald-600' : 'bg-red-600'}`} />
+                        </span>
+                      )}
+
+                      <div className="min-w-0 flex-1 flex flex-col justify-between">
+                        <div className="mb-2">
+                          <h4 className="font-bold text-xs text-[#5C3A21] truncate">{item.name}</h4>
+                          <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded-sm uppercase tracking-wider mt-1.5 inline-block">Popular</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[#A0522D] font-extrabold text-xs">
+                            ₹{hasVariants ? `${item.variants.filter((v) => v.isActive)[0].price}+` : item.basePrice}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => handleAddItemClick(item)}
+                            className="bg-[#FDFBF7] hover:bg-[#5C3A21]/5 text-[#A0522D] hover:text-[#5C3A21] border border-[#A0522D]/40 font-bold text-[10px] px-2 h-6 rounded-full flex items-center gap-0.5 shadow-sm shrink-0"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {/* Categories Horizontal scrollbar */}
-      <div className="px-4 pb-2 border-b border-stone-100">
+      <div className="sticky top-[72px] bg-[#FDFBF7]/95 backdrop-blur-md px-4 pb-2 border-b border-stone-100 z-30 shadow-xs">
         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
           <button
             onClick={() => setSelectedCategoryId(null)}

@@ -78,6 +78,20 @@ export class MenuController {
     return this.menuService.findOneMenuItem(id);
   }
 
+  @Post('items/bulk-price-update')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER)
+  bulkPriceUpdate(
+    @Body() payload: {
+      categoryId?: string;
+      updateType: 'PERCENTAGE' | 'FLAT';
+      action: 'INCREASE' | 'DECREASE';
+      value: number;
+    }
+  ) {
+    return this.menuService.bulkPriceUpdate(payload);
+  }
+
   @Put('items/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER, Role.MANAGER)

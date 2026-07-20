@@ -135,6 +135,45 @@ export default function PosConsolePage() {
     fetchData();
   }, []);
 
+  // Keyboard Shortcuts for POS
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[placeholder*="Search dishes"]') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      } else if (e.key === 'F2') {
+        e.preventDefault();
+        setOrderType((prev) => (prev === 'DINE_IN' ? 'TAKEAWAY' : 'DINE_IN'));
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        const phoneInput = document.querySelector('input[placeholder*="10-digit"]') as HTMLInputElement;
+        const nameInput = document.querySelector('input[placeholder*="Walk-in"]') as HTMLInputElement;
+        if (phoneInput) {
+          phoneInput.focus();
+        } else if (nameInput) {
+          nameInput.focus();
+        }
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        if (cart.length > 0 && !submitting) {
+          handleCreateOrder();
+        }
+      } else if (e.key === 'Escape') {
+        setCustomizingItem(null);
+        setShowCouponListModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [cart, submitting]);
+
   // Filtered menu list
   const filteredItems = menuItems.filter((item) => {
     const matchesCategory = activeCategory === 'ALL' || item.categoryId === activeCategory;
@@ -458,9 +497,18 @@ export default function PosConsolePage() {
       {/* LEFT: Menu list */}
       <div className="flex-1 p-6 lg:border-r border-[#EAD8C0]/40 overflow-y-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-          <h1 className="text-2xl font-black text-[#3C2A21] tracking-tight">
-            POS CONSOLE
-          </h1>
+          <div>
+            <h1 className="text-2xl font-black text-[#3C2A21] tracking-tight">
+              POS CONSOLE
+            </h1>
+            <div className="flex flex-wrap gap-1.5 text-[9px] text-gray-400 font-bold mt-1">
+              <span className="bg-[#EAD8C0]/20 border border-[#EAD8C0]/40 px-2 py-0.5 rounded-md">F1: Search</span>
+              <span className="bg-[#EAD8C0]/20 border border-[#EAD8C0]/40 px-2 py-0.5 rounded-md">F2: Dine/Takeaway</span>
+              <span className="bg-[#EAD8C0]/20 border border-[#EAD8C0]/40 px-2 py-0.5 rounded-md">F3: Cust Phone</span>
+              <span className="bg-[#EAD8C0]/20 border border-[#EAD8C0]/40 px-2 py-0.5 rounded-md">F4: Submit</span>
+              <span className="bg-[#EAD8C0]/20 border border-[#EAD8C0]/40 px-2 py-0.5 rounded-md">ESC: Close Modals</span>
+            </div>
+          </div>
           {/* Search bar */}
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-[#8F6A50]" />

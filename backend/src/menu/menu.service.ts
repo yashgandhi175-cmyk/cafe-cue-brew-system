@@ -384,6 +384,61 @@ export class MenuService {
     });
   }
 
+  async bulkPriceUpdate(payload: {
+    categoryId?: string;
+    updateType: 'PERCENTAGE' | 'FLAT';
+    action: 'INCREASE' | 'DECREASE';
+    value: number;
+  }) {
+    const { categoryId, updateType, action, value } = payload;
+    if (value <= 0) {
+      throw new ConflictException('Value must be greater than zero');
+    }
+
+    // Fetch matching menu items
+    const items = await this.prisma.menuItem.findMany({
+      where: categoryId && categoryId !== 'all' ? { categoryId } : {},
+      include: { variants: true },
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        const basePriceNum = Number(item.basePrice);
+        let newBasePrice = basePriceNum;
+        const multiplier = action === 'INCREASE' ? 1 : -1;
+
+        if (updateType === 'PERCENTAGE') {
+          newBasePrice = basePriceNum + basePriceNum * (value / 100) * multiplier;
+        } else {
+          newBasePrice = basePriceNum + value * multiplier;
+        }
+
+        newBasePrice = Math.max(0, Math.round(newBasePrice * 100) / 100);
+
+        await tx.menuItem.update({
+          where: { id: item.id },
+          data: { basePrice: newBasePrice },
+        });
+
+        for (const variant of item.variants) {
+          const varPriceNum = Number(variant.price);
+          let newVarPrice = varPriceNum;
+          if (updateType === 'PERCENTAGE') {
+            newVarPrice = varPriceNum + varPriceNum * (value / 100) * multiplier;
+          } else {
+            newVarPrice = varPriceNum + value * multiplier;
+          }
+          newVarPrice = Math.max(0, Math.round(newVarPrice * 100) / 100);
+
+          await tx.menuVariant.update({
+            where: { id: variant.id },
+            data: { price: newVarPrice },
+          });
+        }
+      }
+    });
+  }
+
   async getPublicSettings() {
     const settings = await this.prisma.restaurantSettings.findUnique({
       where: { id: 'default' },

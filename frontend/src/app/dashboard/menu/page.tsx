@@ -90,6 +90,15 @@ export default function MenuPage() {
   const [imageUploading, setImageUploading] = useState(false);
   const [itemError, setItemError] = useState('');
 
+  // Bulk Update State
+  const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState('all');
+  const [bulkUpdateType, setBulkUpdateType] = useState<'PERCENTAGE' | 'FLAT'>('PERCENTAGE');
+  const [bulkAction, setBulkAction] = useState<'INCREASE' | 'DECREASE'>('INCREASE');
+  const [bulkValue, setBulkValue] = useState(0);
+  const [bulkError, setBulkError] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
   // 1. Fetch Categories for select dropdown
   const { data: categories } = useQuery<Category[]>({
     queryKey: ['menuCategories'],
@@ -374,6 +383,35 @@ export default function MenuPage() {
     }
   };
 
+  const handleBulkPriceUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bulkValue <= 0) {
+      setBulkError('Value must be greater than zero');
+      return;
+    }
+
+    setBulkSubmitting(true);
+    setBulkError('');
+
+    try {
+      await api.post('/menu/items/bulk-price-update', {
+        categoryId: bulkCategory === 'all' ? undefined : bulkCategory,
+        updateType: bulkUpdateType,
+        action: bulkAction,
+        value: bulkValue,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['menuItems'] });
+      setIsBulkUpdateOpen(false);
+      setBulkValue(0);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      setBulkError(axiosError.response?.data?.message || 'Failed to update prices');
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   // Filters
   const filteredItems = menuItems?.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(itemSearch.toLowerCase());
@@ -455,13 +493,21 @@ export default function MenuPage() {
               </select>
             </div>
 
-            <Button
-              onClick={openCreateItem}
-              className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl flex items-center gap-1.5 h-11"
-            >
-              <Plus className="h-4.5 w-4.5" />
-              Add Menu Item
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setIsBulkUpdateOpen(true)}
+                className="bg-[#8F6A50] text-white hover:bg-[#72543E] rounded-xl flex items-center gap-1.5 h-11"
+              >
+                Bulk Price Update
+              </Button>
+              <Button
+                onClick={openCreateItem}
+                className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl flex items-center gap-1.5 h-11"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                Add Menu Item
+              </Button>
+            </div>
           </div>
 
           {/* Items Grid */}
@@ -978,6 +1024,134 @@ export default function MenuPage() {
                   className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md"
                 >
                   {createItemMutation.isPending || updateItemMutation.isPending ? 'Saving...' : 'Save Item'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* BULK PRICE UPDATE DIALOG MODAL */}
+      {isBulkUpdateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-[#EAD8C0]/20 animate-in fade-in zoom-in-95 duration-150 text-[#3C2A21]">
+            <h2 className="text-xl font-extrabold mb-1">
+              Bulk Price Update
+            </h2>
+            <p className="text-xs text-gray-400 mb-6">Modify prices across multiple menu items and their variants</p>
+
+            {bulkError && (
+              <div className="mb-4 p-2.5 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs text-center font-medium">
+                {bulkError}
+              </div>
+            )}
+
+            <form onSubmit={handleBulkPriceUpdate} className="space-y-4">
+              {/* Category Filter */}
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Target Category</label>
+                <select
+                  value={bulkCategory}
+                  onChange={(e) => setBulkCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] focus:ring-1 focus:ring-[#8F6A50]/20 outline-none rounded-xl text-sm text-gray-600"
+                >
+                  <option value="all">All Categories</option>
+                  {categories?.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action (Increase / Decrease) */}
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Price Action</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs">
+                    <input
+                      type="radio"
+                      name="bulkAction"
+                      value="INCREASE"
+                      checked={bulkAction === 'INCREASE'}
+                      onChange={() => setBulkAction('INCREASE')}
+                      className="accent-[#8F6A50]"
+                    />
+                    Increase Prices
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs">
+                    <input
+                      type="radio"
+                      name="bulkAction"
+                      value="DECREASE"
+                      checked={bulkAction === 'DECREASE'}
+                      onChange={() => setBulkAction('DECREASE')}
+                      className="accent-[#8F6A50]"
+                    />
+                    Decrease Prices
+                  </label>
+                </div>
+              </div>
+
+              {/* Update Type (Percentage / Flat) */}
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Price Adjustment Type</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs">
+                    <input
+                      type="radio"
+                      name="bulkUpdateType"
+                      value="PERCENTAGE"
+                      checked={bulkUpdateType === 'PERCENTAGE'}
+                      onChange={() => setBulkUpdateType('PERCENTAGE')}
+                      className="accent-[#8F6A50]"
+                    />
+                    Percentage (%)
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs">
+                    <input
+                      type="radio"
+                      name="bulkUpdateType"
+                      value="FLAT"
+                      checked={bulkUpdateType === 'FLAT'}
+                      onChange={() => setBulkUpdateType('FLAT')}
+                      className="accent-[#8F6A50]"
+                    />
+                    Flat Rate (₹)
+                  </label>
+                </div>
+              </div>
+
+              {/* Adjustment Value */}
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Adjustment Value</label>
+                <input
+                  type="number"
+                  value={bulkValue || ''}
+                  onChange={(e) => setBulkValue(Number(e.target.value))}
+                  placeholder="e.g. 10"
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] focus:ring-1 focus:ring-[#8F6A50]/20 outline-none rounded-xl text-sm"
+                  min="0.01"
+                  step="any"
+                  required
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 mt-6">
+                <Button
+                  type="button"
+                  onClick={() => setIsBulkUpdateOpen(false)}
+                  variant="ghost"
+                  className="rounded-xl h-10 text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={bulkSubmitting}
+                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md"
+                >
+                  {bulkSubmitting ? 'Updating...' : 'Apply Update'}
                 </Button>
               </div>
             </form>
