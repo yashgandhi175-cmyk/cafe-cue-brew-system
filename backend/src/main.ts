@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { execSync } from 'child_process';
 
 process.on('uncaughtException', (err) => {
   console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
@@ -39,6 +40,15 @@ async function bootstrap() {
     }
   } else {
     console.warn('WARNING: DATABASE_URL environment variable is not defined!');
+  }
+
+  // Run database schema synchronization at runtime startup
+  try {
+    console.log('Running database schema sync (prisma db push) at runtime...');
+    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
+    console.log('Database schema sync completed successfully.');
+  } catch (dbError) {
+    console.error('Error running database schema sync at runtime startup:', dbError);
   }
 
   const app = await NestFactory.create(AppModule);
