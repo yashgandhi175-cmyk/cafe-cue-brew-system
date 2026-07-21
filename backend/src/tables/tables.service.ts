@@ -376,19 +376,21 @@ export class TablesService {
       });
 
       // 6. Create Audit Log
-      await tx.auditLog.create({
-        data: {
-          action: 'TABLE_SHIFT',
-          entity: 'RestaurantTable',
-          entityId: targetTableId,
-          performedById: staffId || null,
-          details: JSON.stringify({
-            fromTable: sourceTable.tableNumber,
-            toTable: targetTable.tableNumber,
-            reason: reason || 'Customer shifted tables',
-          }),
-        },
-      });
+      if (staffId) {
+        await tx.auditLog.create({
+          data: {
+            staffId,
+            action: 'TABLE_SHIFT',
+            entityType: 'RestaurantTable',
+            entityId: targetTableId,
+            newData: JSON.stringify({
+              fromTable: sourceTable.tableNumber,
+              toTable: targetTable.tableNumber,
+              reason: reason || 'Customer shifted tables',
+            }),
+          },
+        });
+      }
 
       return {
         message: `Successfully shifted Table ${sourceTable.tableNumber} to Table ${targetTable.tableNumber}`,
@@ -583,19 +585,21 @@ export class TablesService {
       }
 
       const mergedNumbers = sourceTables.map((t) => t.tableNumber).join(', ');
-      await tx.auditLog.create({
-        data: {
-          action: 'TABLE_MERGE',
-          entity: 'RestaurantTable',
-          entityId: targetTableId,
-          performedById: staffId || null,
-          details: JSON.stringify({
-            sourceTables: mergedNumbers,
-            targetTable: targetTable.tableNumber,
-            reason: reason || 'Combined tables for group seating',
-          }),
-        },
-      });
+      if (staffId) {
+        await tx.auditLog.create({
+          data: {
+            staffId,
+            action: 'TABLE_MERGE',
+            entityType: 'RestaurantTable',
+            entityId: targetTableId,
+            newData: JSON.stringify({
+              sourceTables: mergedNumbers,
+              targetTable: targetTable.tableNumber,
+              reason: reason || 'Combined tables for group seating',
+            }),
+          },
+        });
+      }
 
       return {
         message: `Successfully merged Tables (${mergedNumbers}) into Table ${targetTable.tableNumber}`,
