@@ -2316,4 +2316,25 @@ export class OrdersService {
 
     return this.getCart(tableId);
   }
+
+  async getActiveTrackingTokenForTable(tableId: string) {
+    const activeSession = await this.prisma.tableSession.findFirst({
+      where: { tableId, status: 'ACTIVE' },
+    });
+
+    if (!activeSession) {
+      return { trackingToken: null };
+    }
+
+    const latestOrder = await this.prisma.order.findFirst({
+      where: {
+        tableSessionId: activeSession.id,
+        status: { notIn: ['CANCELLED', 'VOIDED', 'COMPLETED'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { publicTrackingToken: true },
+    });
+
+    return { trackingToken: latestOrder?.publicTrackingToken || null };
+  }
 }

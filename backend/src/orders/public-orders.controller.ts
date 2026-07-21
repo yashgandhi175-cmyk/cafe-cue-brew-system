@@ -19,6 +19,11 @@ export class PublicOrdersController {
     return this.ordersService.getOrderTrackingDetails(trackingToken);
   }
 
+  @Get('active-token/:tableId')
+  getActiveTrackingTokenForTable(@Param('tableId') tableId: string) {
+    return this.ordersService.getActiveTrackingTokenForTable(tableId);
+  }
+
   @Get('cart/:tableId')
   async getCart(@Param('tableId') tableId: string) {
     return this.ordersService.getCart(tableId);

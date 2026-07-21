@@ -94,6 +94,7 @@ interface Order {
   publicTrackingToken: string;
   customerId: string | null;
   tableId: string | null;
+  tableSessionId?: string | null;
   tableNumberSnapshot: string | null;
   source: 'QR' | 'OWNER_POS' | 'MANAGER' | 'WAITER' | 'CASHIER';
   status: 'RECEIVED' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
@@ -181,6 +182,8 @@ export default function OrdersPage() {
   // Dialog/Detail state
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [groupByTable, setGroupByTable] = useState(true);
+  const [selectedGroupOrders, setSelectedGroupOrders] = useState<Order[] | null>(null);
 
   // Status transitions state
   const [isOverrideChecked, setIsOverrideChecked] = useState(false);
@@ -400,6 +403,102 @@ export default function OrdersPage() {
     return liveOrders.filter((o) => o.status === status);
   };
 
+  // Grouping helper for live orders
+  const groupOrdersForStatus = (status: string) => {
+    const rawList = liveOrders.filter((o) => o.status === status);
+    if (!groupByTable) {
+      return rawList.map((o) => ({ isGroup: false as const, order: o, id: o.id, createdAt: o.createdAt }));
+    }
+
+    const groupsMap = new Map<string, {
+      isGroup: true;
+      id: string;
+      tableNumber: string;
+      customerName: string;
+      orders: Order[];
+      orderNumbers: string[];
+      itemsCount: number;
+      grandTotal: number;
+      createdAt: string;
+    }>();
+
+    const standalone: Array<{ isGroup: false; order: Order; id: string; createdAt: string }> = [];
+
+    for (const ord of rawList) {
+      const tableKey = ord.tableSessionId || ord.tableId || ord.tableNumberSnapshot;
+      if (!tableKey) {
+        standalone.push({ isGroup: false, order: ord, id: ord.id, createdAt: ord.createdAt });
+        continue;
+      }
+
+      if (!groupsMap.has(tableKey)) {
+        groupsMap.set(tableKey, {
+          isGroup: true,
+          id: tableKey,
+          tableNumber: ord.tableNumberSnapshot || 'Table',
+          customerName: ord.customer?.name || 'Customer',
+          orders: [ord],
+          orderNumbers: [ord.orderNumber],
+          itemsCount: ord.items.reduce((acc, i) => acc + i.quantity, 0),
+          grandTotal: Number(ord.grandTotal),
+          createdAt: ord.createdAt,
+        });
+      } else {
+        const group = groupsMap.get(tableKey)!;
+        group.orders.push(ord);
+        group.orderNumbers.push(ord.orderNumber);
+        group.itemsCount += ord.items.reduce((acc, i) => acc + i.quantity, 0);
+        group.grandTotal += Number(ord.grandTotal);
+        if (new Date(ord.createdAt) < new Date(group.createdAt)) {
+          group.createdAt = ord.createdAt;
+        }
+      }
+    }
+
+    return [...Array.from(groupsMap.values()), ...standalone];
+  };
+
+  const handleGroupCardClick = (orders: Order[]) => {
+    if (orders.length === 1) {
+      handleCardClick(orders[0]);
+      return;
+    }
+    setSelectedGroupOrders(orders);
+    setSelectedOrder(orders[0]);
+    setDetailModalOpen(true);
+    setErrorAlert(null);
+  };
+
+  const executeStatusUpdate = async (targetStatus: string) => {
+    if (!selectedOrder) return;
+    const ordersToUpdate = (selectedGroupOrders && selectedGroupOrders.length > 0)
+      ? selectedGroupOrders
+      : [selectedOrder];
+
+    try {
+      await Promise.all(
+        ordersToUpdate.map((o) =>
+          api.patch(`/orders/${o.id}/status`, {
+            status: targetStatus,
+            override: isOverrideChecked,
+            overrideReason: overrideReasonText || undefined,
+          })
+        )
+      );
+      queryClient.invalidateQueries({ queryKey: ['liveOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['historyOrders'] });
+      setDetailModalOpen(false);
+      setSelectedOrder(null);
+      setSelectedGroupOrders(null);
+      setIsOverrideChecked(false);
+      setOverrideReasonText('');
+      setErrorAlert(null);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      setErrorAlert(axiosError.response?.data?.message || 'Failed to update order status.');
+    }
+  };
+
   return (
     <div className="space-y-6 text-[#5C3A21]">
       {/* Top action/tabs bar */}
@@ -423,6 +522,20 @@ export default function OrdersPage() {
           >
             {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
             <span>{soundEnabled ? 'Chime Active' : 'Sound Blocked'}</span>
+          </button>
+
+          {/* Group by Table Toggle */}
+          <button
+            onClick={() => setGroupByTable(!groupByTable)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border shadow-xs ${
+              groupByTable
+                ? 'bg-amber-100 border-amber-300 text-amber-900 font-extrabold'
+                : 'bg-stone-100 border-stone-300 text-stone-600 hover:bg-stone-200'
+            }`}
+            title="Group multiple orders from the same table into a single card"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>{groupByTable ? 'Grouped by Table' : 'Individual Orders'}</span>
           </button>
 
           <div className="flex bg-stone-150 p-1 rounded-xl border border-stone-200">
@@ -531,7 +644,7 @@ export default function OrdersPage() {
             {/* Columns grid */}
             <div className="hidden md:grid grid-cols-5 gap-3.5 items-start">
               {(['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED'] as const).map((status) => {
-                const list = filterLive(status);
+                const list = groupOrdersForStatus(status);
                 return (
                   <div key={status} className="bg-stone-50 border border-stone-200/80 rounded-2xl p-3 space-y-3 min-h-[500px]">
                     <div className="flex justify-between items-center border-b border-stone-200/60 pb-2">
@@ -542,34 +655,71 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="space-y-2.5 max-h-[480px] overflow-y-auto no-scrollbar">
-                      {list.map((order) => (
-                        <div
-                          key={order.id}
-                          onClick={() => handleCardClick(order)}
-                          className="bg-white border border-stone-200/60 hover:border-[#8F6A50] rounded-xl p-3 space-y-2 shadow-xs cursor-pointer hover:shadow-md transition-all duration-150 relative overflow-hidden"
-                        >
-                          {status === 'RECEIVED' && (
-                            <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 animate-pulse" />
-                          )}
-                          <div className="flex justify-between items-start text-xs">
-                            <span className="font-black text-stone-800 truncate">{order.orderNumber}</span>
-                            <span className="text-[10px] text-stone-400 font-extrabold shrink-0">
-                              {getElapsedTime(order.createdAt)}
-                            </span>
-                          </div>
+                      {list.map((item) => {
+                        if ('isGroup' in item && item.isGroup) {
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => handleGroupCardClick(item.orders)}
+                              className="bg-amber-50/40 border border-amber-300 hover:border-[#8F6A50] rounded-xl p-3 space-y-2 shadow-xs cursor-pointer hover:shadow-md transition-all duration-150 relative overflow-hidden"
+                            >
+                              {status === 'RECEIVED' && (
+                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-amber-500 animate-pulse" />
+                              )}
+                              <div className="flex justify-between items-start text-xs">
+                                <span className="font-black text-[#5C3A21] truncate flex items-center gap-1.5">
+                                  <span className="bg-amber-200 text-amber-900 text-[10px] px-1.5 py-0.5 rounded font-black">
+                                    {item.orders.length} orders
+                                  </span>
+                                  <span>{item.tableNumber}</span>
+                                </span>
+                                <span className="text-[10px] text-stone-400 font-extrabold shrink-0">
+                                  {getElapsedTime(item.createdAt)}
+                                </span>
+                              </div>
 
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-[#8F6A50]">
-                            <span>{order.tableNumberSnapshot || 'POS'}</span>
-                            <span className="text-stone-300">•</span>
-                            <span className="text-stone-500 truncate">{order.customer?.name || 'Customer'}</span>
-                          </div>
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-[#8F6A50]">
+                                <span className="text-stone-600 truncate">{item.customerName}</span>
+                              </div>
 
-                          <div className="flex justify-between items-center border-t border-stone-100 pt-2 text-[10px] font-extrabold text-stone-400">
-                            <span>{order.items.length} items</span>
-                            <span className="text-[#A0522D] text-xs font-black">₹{order.grandTotal}</span>
+                              <div className="flex justify-between items-center border-t border-stone-200/60 pt-2 text-[10px] font-extrabold text-stone-500">
+                                <span>{item.itemsCount} items</span>
+                                <span className="text-[#A0522D] text-xs font-black">₹{item.grandTotal.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const order = item.order;
+                        return (
+                          <div
+                            key={order.id}
+                            onClick={() => handleCardClick(order)}
+                            className="bg-white border border-stone-200/60 hover:border-[#8F6A50] rounded-xl p-3 space-y-2 shadow-xs cursor-pointer hover:shadow-md transition-all duration-150 relative overflow-hidden"
+                          >
+                            {status === 'RECEIVED' && (
+                              <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 animate-pulse" />
+                            )}
+                            <div className="flex justify-between items-start text-xs">
+                              <span className="font-black text-stone-800 truncate">{order.orderNumber}</span>
+                              <span className="text-[10px] text-stone-400 font-extrabold shrink-0">
+                                {getElapsedTime(order.createdAt)}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-[#8F6A50]">
+                              <span>{order.tableNumberSnapshot || 'POS'}</span>
+                              <span className="text-stone-300">•</span>
+                              <span className="text-stone-500 truncate">{order.customer?.name || 'Customer'}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center border-t border-stone-100 pt-2 text-[10px] font-extrabold text-stone-400">
+                              <span>{order.items.length} items</span>
+                              <span className="text-[#A0522D] text-xs font-black">₹{order.grandTotal}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -938,12 +1088,7 @@ export default function OrdersPage() {
                   {/* RECEIVED -> ACCEPTED */}
                   {selectedOrder.status === 'RECEIVED' && (isOwner || isManager) && (
                     <Button
-                      onClick={() => updateStatusMutation.mutate({
-                        id: selectedOrder.id,
-                        status: 'ACCEPTED',
-                        override: isOverrideChecked,
-                        overrideReason: overrideReasonText,
-                      })}
+                      onClick={() => executeStatusUpdate('ACCEPTED')}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg"
                     >
                       Accept Order
@@ -953,12 +1098,7 @@ export default function OrdersPage() {
                   {/* ACCEPTED -> PREPARING */}
                   {selectedOrder.status === 'ACCEPTED' && (isOwner || isManager) && (
                     <Button
-                      onClick={() => updateStatusMutation.mutate({
-                        id: selectedOrder.id,
-                        status: 'PREPARING',
-                        override: isOverrideChecked,
-                        overrideReason: overrideReasonText,
-                      })}
+                      onClick={() => executeStatusUpdate('PREPARING')}
                       className="bg-[#8F6A50] hover:bg-[#5C3A21] text-white font-bold px-4 py-2 rounded-lg"
                     >
                       Start Preparation
@@ -968,12 +1108,7 @@ export default function OrdersPage() {
                   {/* PREPARING -> READY */}
                   {selectedOrder.status === 'PREPARING' && (isOwner || isManager) && (
                     <Button
-                      onClick={() => updateStatusMutation.mutate({
-                        id: selectedOrder.id,
-                        status: 'READY',
-                        override: isOverrideChecked,
-                        overrideReason: overrideReasonText,
-                      })}
+                      onClick={() => executeStatusUpdate('READY')}
                       className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg"
                     >
                       Mark Ready to Serve
@@ -983,12 +1118,7 @@ export default function OrdersPage() {
                   {/* READY -> SERVED */}
                   {selectedOrder.status === 'READY' && (isOwner || isManager || isWaiter) && (
                     <Button
-                      onClick={() => updateStatusMutation.mutate({
-                        id: selectedOrder.id,
-                        status: 'SERVED',
-                        override: isOverrideChecked,
-                        overrideReason: overrideReasonText,
-                      })}
+                      onClick={() => executeStatusUpdate('SERVED')}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg"
                     >
                       Mark Served
@@ -998,12 +1128,7 @@ export default function OrdersPage() {
                   {/* SERVED -> COMPLETED */}
                   {selectedOrder.status === 'SERVED' && (isOwner || isManager || isCashier) && (
                     <Button
-                      onClick={() => updateStatusMutation.mutate({
-                        id: selectedOrder.id,
-                        status: 'COMPLETED',
-                        override: isOverrideChecked,
-                        overrideReason: overrideReasonText,
-                      })}
+                      onClick={() => executeStatusUpdate('COMPLETED')}
                       className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg"
                     >
                       Complete Order
@@ -1016,15 +1141,10 @@ export default function OrdersPage() {
                       {(['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'] as const).map((destStatus) => (
                         <button
                           key={destStatus}
-                          onClick={() => updateStatusMutation.mutate({
-                            id: selectedOrder.id,
-                            status: destStatus,
-                            override: true,
-                            overrideReason: overrideReasonText,
-                          })}
-                          className="bg-[#A0522D]/10 hover:bg-[#A0522D] text-[#A0522D] hover:text-white border border-[#A0522D] font-bold p-2 rounded-lg transition-all"
+                          onClick={() => executeStatusUpdate(destStatus)}
+                          className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-extrabold py-1.5 px-2 rounded-lg transition-colors"
                         >
-                          Force {destStatus}
+                          Jump to {destStatus}
                         </button>
                       ))}
                     </div>

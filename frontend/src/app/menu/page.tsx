@@ -166,6 +166,7 @@ function MenuPageContent() {
   // Cart & Customization States
   const [cart, setCart] = useState<{ [key: string]: CartItem }>({});
   const [cartModalOpen, setCartModalOpen] = useState(false);
+  const [activeTrackingToken, setActiveTrackingToken] = useState<string | null>(null);
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [customVariant, setCustomVariant] = useState<{ id: string; name: string; price: string } | null>(null);
   const [customAddons, setCustomAddons] = useState<Array<{ id: string; name: string; price: string }>>([]);
@@ -296,6 +297,26 @@ function MenuPageContent() {
             } catch {
               // ignore
             }
+          }
+        }
+
+        // Load active tracking token for table if any
+        try {
+          const tokenRes = await axios.get(`${API_URL}/public/orders/active-token/${tableId}`);
+          if (tokenRes.data && tokenRes.data.trackingToken) {
+            setActiveTrackingToken(tokenRes.data.trackingToken);
+            localStorage.setItem(`ccb_active_tracking_token_${tableId}`, tokenRes.data.trackingToken);
+            localStorage.setItem('ccb_last_token', tokenRes.data.trackingToken);
+          } else {
+            const cachedToken = localStorage.getItem(`ccb_active_tracking_token_${tableId}`) || localStorage.getItem('ccb_last_token');
+            if (cachedToken) {
+              setActiveTrackingToken(cachedToken);
+            }
+          }
+        } catch {
+          const cachedToken = localStorage.getItem(`ccb_active_tracking_token_${tableId}`) || localStorage.getItem('ccb_last_token');
+          if (cachedToken) {
+            setActiveTrackingToken(cachedToken);
           }
         }
       } catch (err: unknown) {
@@ -616,6 +637,12 @@ function MenuPageContent() {
 
       setCheckoutOpen(false);
 
+      if (res.data?.publicTrackingToken) {
+        setActiveTrackingToken(res.data.publicTrackingToken);
+        localStorage.setItem(`ccb_active_tracking_token_${tableId}`, res.data.publicTrackingToken);
+        localStorage.setItem('ccb_last_token', res.data.publicTrackingToken);
+      }
+
       router.push(`/menu/track.html?token=${res.data.publicTrackingToken}`);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } };
@@ -673,6 +700,18 @@ function MenuPageContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {activeTrackingToken && (
+            <Button
+              size="sm"
+              onClick={() => router.push(`/menu/track.html?token=${activeTrackingToken}`)}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-full shadow-sm text-xs px-3 h-8 flex items-center gap-1.5 animate-pulse"
+              title="Track your active dining order"
+            >
+              <Clock className="w-3.5 h-3.5 text-white" />
+              <span>Track Order</span>
+            </Button>
+          )}
+
           <Button
             size="sm"
             onClick={() => setCartModalOpen(true)}
