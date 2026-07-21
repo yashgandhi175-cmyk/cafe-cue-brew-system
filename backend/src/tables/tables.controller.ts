@@ -8,10 +8,13 @@ import {
   Param,
   UseGuards,
   Query,
+  Request,
 } from '@nestjs/common';
 import { TablesService } from './tables.service';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
+import { ShiftTableDto } from './dto/shift-table.dto';
+import { MergeTablesDto } from './dto/merge-tables.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -34,6 +37,22 @@ export class TablesController {
   findAll(@Query('all') all?: string) {
     const includeInactive = all === 'true';
     return this.tablesService.findAll(includeInactive);
+  }
+
+  @Post('shift')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.WAITER, Role.CASHIER)
+  shiftTable(@Body() shiftTableDto: ShiftTableDto, @Request() req: any) {
+    const staffId = req.user?.id || req.user?.sub;
+    return this.tablesService.shiftTable(shiftTableDto, staffId);
+  }
+
+  @Post('merge')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.WAITER, Role.CASHIER)
+  mergeTables(@Body() mergeTablesDto: MergeTablesDto, @Request() req: any) {
+    const staffId = req.user?.id || req.user?.sub;
+    return this.tablesService.mergeTables(mergeTablesDto, staffId);
   }
 
   @Get(':id')
