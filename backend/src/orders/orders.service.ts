@@ -286,28 +286,14 @@ export class OrdersService {
         },
       });
 
-      // Prepare Invoice/Bill record (unfinalized draft bill)
-      const bill = await tx.bill.create({
-        data: {
-          invoiceNumber: null,
-          status: BillStatus.DRAFT,
-          paymentStatus: PaymentStatus.UNPAID,
-          orderId: order.id,
-          subtotal: calcResult.subtotal,
-          discount: calcResult.discount,
-          itemDiscount: 0.0,
-          couponDiscount: calcResult.couponDiscount,
-          manualDiscount: calcResult.manualDiscount,
-          totalDiscount: calcResult.discount,
-          taxableAmount: calcResult.taxableAmount,
-          cgst: calcResult.cgst,
-          sgst: calcResult.sgst,
-          serviceCharge: calcResult.serviceCharge,
-          nightCharge: calcResult.nightCharge,
-          roundOff: calcResult.roundOff,
-          grandTotal: calcResult.grandTotal,
-        },
-      });
+      // Prepare or update Invoice/Bill record (unfinalized draft bill) and table sessions
+      const bill = await this.handleTableSessionAndBill(
+        tx,
+        table.id,
+        order.id,
+        calcResult,
+        settings,
+      );
 
       // Authoritative Coupon validation and application inside transaction
       if (dto.couponCode) {
@@ -364,6 +350,16 @@ export class OrdersService {
         });
       }
 
+      // Clear the customer's cart for this table on successful order placement
+      const cart = await tx.customerCart.findUnique({
+        where: { tableId: table.id },
+      });
+      if (cart) {
+        await tx.customerCartItem.deleteMany({
+          where: { cartId: cart.id },
+        });
+      }
+
       const orderRecord = await tx.order.findUnique({
         where: { id: order.id },
         include: {
@@ -404,6 +400,53 @@ export class OrdersService {
 
     if (!order) {
       throw new NotFoundException('Order not found or tracking link invalid.');
+    }
+
+    if (order.tableSessionId) {
+      const sessionOrders = await this.prisma.order.findMany({
+        where: {
+          tableSessionId: order.tableSessionId,
+          status: { notIn: ['CANCELLED', 'VOIDED'] },
+        },
+        include: {
+          items: {
+            include: { addons: true },
+          },
+          payments: {
+            where: { status: PaymentStatusDetail.COMPLETED },
+          },
+        },
+      });
+
+      const mergedItems = [];
+      const mergedPayments = [];
+      for (const so of sessionOrders) {
+        mergedItems.push(...so.items);
+        mergedPayments.push(...so.payments);
+      }
+      (order as any).items = mergedItems;
+      (order as any).payments = mergedPayments;
+
+      const activeBill = await this.prisma.bill.findFirst({
+        where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
+      }) || await this.prisma.bill.findFirst({
+        where: { tableSessionId: order.tableSessionId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (activeBill) {
+        order.subtotal = activeBill.subtotal;
+        order.discount = activeBill.discount;
+        order.couponDiscount = activeBill.couponDiscount;
+        order.taxableAmount = activeBill.taxableAmount;
+        order.cgst = activeBill.cgst;
+        order.sgst = activeBill.sgst;
+        order.serviceCharge = activeBill.serviceCharge;
+        order.nightCharge = activeBill.nightCharge;
+        order.roundOff = activeBill.roundOff;
+        order.grandTotal = activeBill.grandTotal;
+        (order as any).bills = [activeBill];
+      }
     }
 
     const settledSum = order.payments
@@ -531,12 +574,21 @@ export class OrdersService {
     const limit = Number(filters.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = {
+      AND: [
+        {
+          OR: [
+            { tableSessionId: null },
+            { bills: { some: {} } }
+          ]
+        }
+      ]
+    };
 
-    if (filters.status) where.status = filters.status;
-    if (filters.paymentStatus) where.paymentStatus = filters.paymentStatus;
-    if (filters.source) where.source = filters.source;
-    if (filters.tableId) where.tableId = filters.tableId;
+    if (filters.status) (where as any).status = filters.status;
+    if (filters.paymentStatus) (where as any).paymentStatus = filters.paymentStatus;
+    if (filters.source) (where as any).source = filters.source;
+    if (filters.tableId) (where as any).tableId = filters.tableId;
 
     if (filters.search) {
       where.OR = [
@@ -601,11 +653,67 @@ export class OrdersService {
           },
           orderBy: { changedAt: 'asc' },
         },
+        bills: true,
+        payments: true,
       },
     });
 
     if (!order) {
       throw new NotFoundException('Order not found');
+    }
+
+    if (order.tableSessionId) {
+      const sessionOrders = await this.prisma.order.findMany({
+        where: {
+          tableSessionId: order.tableSessionId,
+          status: { notIn: ['CANCELLED', 'VOIDED'] },
+        },
+        include: {
+          items: {
+            include: { addons: true },
+          },
+          payments: {
+            include: { splitPayments: true },
+          },
+        },
+      });
+
+      // Merge all items from all non-cancelled orders in the session
+      const mergedItems = [];
+      const mergedPayments = [];
+      for (const so of sessionOrders) {
+        mergedItems.push(...so.items);
+        mergedPayments.push(...so.payments);
+      }
+      (order as any).items = mergedItems;
+      (order as any).payments = mergedPayments;
+
+      // Find the active bill for the session
+      const activeBill = order.bills.find(b => b.status === 'DRAFT')
+        || await this.prisma.bill.findFirst({
+            where: { tableSessionId: order.tableSessionId, status: 'DRAFT' },
+          })
+        || await this.prisma.bill.findFirst({
+            where: { tableSessionId: order.tableSessionId },
+            orderBy: { createdAt: 'desc' },
+          });
+
+      if (activeBill) {
+        order.subtotal = activeBill.subtotal;
+        order.discount = activeBill.discount;
+        order.couponDiscount = activeBill.couponDiscount;
+        order.taxableAmount = activeBill.taxableAmount;
+        order.cgst = activeBill.cgst;
+        order.sgst = activeBill.sgst;
+        order.serviceCharge = activeBill.serviceCharge;
+        order.nightCharge = activeBill.nightCharge;
+        order.roundOff = activeBill.roundOff;
+        order.grandTotal = activeBill.grandTotal;
+        // Make sure order.bills includes this active bill
+        if (!order.bills.some(b => b.id === activeBill.id)) {
+          order.bills.push(activeBill);
+        }
+      }
     }
 
     return order;
@@ -1332,40 +1440,26 @@ export class OrdersService {
           },
         });
 
-        // Set table to OCCUPIED if Dine-in
-        if (table) {
-          await tx.restaurantTable.update({
-            where: { id: table.id },
-            data: { status: 'OCCUPIED' },
+        // Prepare or update draft Bill and table sessions
+        const bill = await this.handleTableSessionAndBill(
+          tx,
+          table ? table.id : null,
+          order.id,
+          calcResult,
+          settings,
+        );
+
+        if (dto.manualDiscountValue) {
+          await tx.bill.update({
+            where: { id: bill.id },
+            data: {
+              manualDiscountType: dto.manualDiscountType,
+              manualDiscountValue: dto.manualDiscountValue,
+              manualDiscountReason: dto.manualDiscountReason,
+              manualDiscountAppliedBy: staffId,
+            },
           });
         }
-
-        // Create draft Bill
-        const bill = await tx.bill.create({
-          data: {
-            invoiceNumber: null,
-            status: BillStatus.DRAFT,
-            paymentStatus: PaymentStatus.UNPAID,
-            orderId: order.id,
-            subtotal: calcResult.subtotal,
-            discount: calcResult.discount,
-            itemDiscount: 0.0,
-            couponDiscount: calcResult.couponDiscount,
-            manualDiscount: calcResult.manualDiscount,
-            totalDiscount: calcResult.discount,
-            manualDiscountType: dto.manualDiscountType,
-            manualDiscountValue: dto.manualDiscountValue,
-            manualDiscountReason: dto.manualDiscountReason,
-            manualDiscountAppliedBy: dto.manualDiscountValue ? staffId : null,
-            taxableAmount: calcResult.taxableAmount,
-            cgst: calcResult.cgst,
-            sgst: calcResult.sgst,
-            serviceCharge: calcResult.serviceCharge,
-            nightCharge: calcResult.nightCharge,
-            roundOff: calcResult.roundOff,
-            grandTotal: calcResult.grandTotal,
-          },
-        });
 
         // Authoritative Coupon validation and application inside transaction
         if (dto.couponCode) {
@@ -1865,5 +1959,325 @@ export class OrdersService {
         );
       }
     }
+  }
+
+  private async handleTableSessionAndBill(
+    tx: any,
+    tableId: string | null,
+    orderId: string,
+    calcResult: any,
+    settings: any,
+  ) {
+    if (!tableId) {
+      return tx.bill.create({
+        data: {
+          invoiceNumber: null,
+          status: 'DRAFT',
+          paymentStatus: 'UNPAID',
+          orderId,
+          subtotal: calcResult.subtotal,
+          discount: calcResult.discount,
+          itemDiscount: 0.0,
+          couponDiscount: calcResult.couponDiscount,
+          manualDiscount: calcResult.manualDiscount,
+          totalDiscount: calcResult.discount,
+          taxableAmount: calcResult.taxableAmount,
+          cgst: calcResult.cgst,
+          sgst: calcResult.sgst,
+          serviceCharge: calcResult.serviceCharge,
+          nightCharge: calcResult.nightCharge,
+          roundOff: calcResult.roundOff,
+          grandTotal: calcResult.grandTotal,
+        },
+      });
+    }
+
+    // Lock the table row to serialize concurrent table session creation checks
+    await tx.restaurantTable.update({
+      where: { id: tableId },
+      data: { status: 'OCCUPIED' },
+    });
+
+    let session = await tx.tableSession.findFirst({
+      where: { tableId, status: 'ACTIVE' },
+    });
+
+    if (!session) {
+      session = await tx.tableSession.create({
+        data: {
+          tableId,
+          status: 'ACTIVE',
+        },
+      });
+    }
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: { tableSessionId: session.id },
+    });
+
+    let bill = await tx.bill.findFirst({
+      where: { tableSessionId: session.id, status: 'DRAFT' },
+    });
+
+    if (bill) {
+      const newSubtotal = Number(bill.subtotal) + Number(calcResult.subtotal);
+
+      const mergedCalc = this.calcService.calculate({
+        subtotal: newSubtotal,
+        manualDiscount: Number(bill.manualDiscount),
+        couponDiscount: Number(bill.couponDiscount),
+        settings,
+      });
+
+      bill = await tx.bill.update({
+        where: { id: bill.id },
+        data: {
+          subtotal: mergedCalc.subtotal,
+          discount: mergedCalc.discount,
+          totalDiscount: mergedCalc.discount,
+          taxableAmount: mergedCalc.taxableAmount,
+          cgst: mergedCalc.cgst,
+          sgst: mergedCalc.sgst,
+          serviceCharge: mergedCalc.serviceCharge,
+          nightCharge: mergedCalc.nightCharge,
+          roundOff: mergedCalc.roundOff,
+          grandTotal: mergedCalc.grandTotal,
+        },
+      });
+    } else {
+      bill = await tx.bill.create({
+        data: {
+          invoiceNumber: null,
+          status: 'DRAFT',
+          paymentStatus: 'UNPAID',
+          orderId,
+          tableSessionId: session.id,
+          subtotal: calcResult.subtotal,
+          discount: calcResult.discount,
+          itemDiscount: 0.0,
+          couponDiscount: calcResult.couponDiscount,
+          manualDiscount: calcResult.manualDiscount,
+          totalDiscount: calcResult.discount,
+          taxableAmount: calcResult.taxableAmount,
+          cgst: calcResult.cgst,
+          sgst: calcResult.sgst,
+          serviceCharge: calcResult.serviceCharge,
+          nightCharge: calcResult.nightCharge,
+          roundOff: calcResult.roundOff,
+          grandTotal: calcResult.grandTotal,
+        },
+      });
+    }
+
+    return bill;
+  }
+
+  // ==========================================
+  // CUSTOMER PERSISTENT CART METHODS
+  // ==========================================
+
+  async getCart(tableId: string) {
+    let cart = await this.prisma.customerCart.findUnique({
+      where: { tableId },
+      include: {
+        items: {
+          include: {
+            menuItem: {
+              include: {
+                variants: true,
+                menuItemAddons: {
+                  include: { addon: true },
+                },
+              },
+            },
+            variant: true,
+          },
+        },
+      },
+    });
+
+    if (!cart) {
+      cart = await this.prisma.customerCart.create({
+        data: { tableId },
+        include: {
+          items: {
+            include: {
+              menuItem: {
+                include: {
+                  variants: true,
+                  menuItemAddons: {
+                    include: { addon: true },
+                  },
+                },
+              },
+              variant: true,
+            },
+          },
+        },
+      });
+    }
+
+    const items = cart.items.map((item) => {
+      const addonIdsArray = item.addonIds ? item.addonIds.split(',').filter(Boolean) : [];
+      const resolvedAddons = item.menuItem.menuItemAddons
+        .map((ma) => ma.addon)
+        .filter((a) => addonIdsArray.includes(a.id))
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          price: a.price.toString(),
+        }));
+
+      return {
+        id: item.id,
+        menuItem: {
+          id: item.menuItem.id,
+          name: item.menuItem.name,
+          description: item.menuItem.description,
+          basePrice: item.menuItem.basePrice.toString(),
+          image: item.menuItem.image,
+          isVeg: item.menuItem.isVeg,
+          available: item.menuItem.available,
+          popular: item.menuItem.popular,
+          recommended: item.menuItem.recommended,
+          bestSeller: item.menuItem.bestSeller,
+          prepTime: item.menuItem.prepTime,
+          variants: item.menuItem.variants.map((v) => ({
+            id: v.id,
+            name: v.name,
+            price: v.price.toString(),
+          })),
+        },
+        selectedVariant: item.variant
+          ? {
+              id: item.variant.id,
+              name: item.variant.name,
+              price: item.variant.price.toString(),
+            }
+          : undefined,
+        selectedAddons: resolvedAddons,
+        quantity: item.quantity,
+        notes: item.notes || '',
+      };
+    });
+
+    return {
+      id: cart.id,
+      tableId: cart.tableId,
+      items,
+    };
+  }
+
+  async updateCartItem(
+    tableId: string,
+    menuItemId: string,
+    variantId: string | null,
+    addonIds: string[],
+    quantity: number,
+    notes?: string,
+  ) {
+    let cart = await this.prisma.customerCart.findUnique({
+      where: { tableId },
+    });
+
+    if (!cart) {
+      cart = await this.prisma.customerCart.create({
+        data: { tableId },
+      });
+    }
+
+    const addonIdsStr = addonIds.sort().join(',');
+
+    const existingItem = await this.prisma.customerCartItem.findFirst({
+      where: {
+        cartId: cart.id,
+        menuItemId,
+        variantId: variantId || null,
+        addonIds: addonIdsStr,
+      },
+    });
+
+    if (existingItem) {
+      if (quantity <= 0) {
+        await this.prisma.customerCartItem.delete({
+          where: { id: existingItem.id },
+        });
+      } else {
+        await this.prisma.customerCartItem.update({
+          where: { id: existingItem.id },
+          data: { quantity, notes: notes || null },
+        });
+      }
+    } else if (quantity > 0) {
+      await this.prisma.customerCartItem.create({
+        data: {
+          cartId: cart.id,
+          menuItemId,
+          variantId: variantId || null,
+          addonIds: addonIdsStr,
+          quantity,
+          notes: notes || null,
+        },
+      });
+    }
+
+    return this.getCart(tableId);
+  }
+
+  async clearCart(tableId: string) {
+    const cart = await this.prisma.customerCart.findUnique({
+      where: { tableId },
+    });
+
+    if (cart) {
+      await this.prisma.customerCartItem.deleteMany({
+        where: { cartId: cart.id },
+      });
+    }
+
+    return { success: true };
+  }
+
+  async syncCart(
+    tableId: string,
+    items: Array<{
+      menuItemId: string;
+      variantId?: string;
+      addonIds: string[];
+      quantity: number;
+      notes?: string;
+    }>,
+  ) {
+    let cart = await this.prisma.customerCart.findUnique({
+      where: { tableId },
+    });
+
+    if (!cart) {
+      cart = await this.prisma.customerCart.create({
+        data: { tableId },
+      });
+    }
+
+    await this.prisma.customerCartItem.deleteMany({
+      where: { cartId: cart.id },
+    });
+
+    for (const item of items) {
+      if (item.quantity > 0) {
+        await this.prisma.customerCartItem.create({
+          data: {
+            cartId: cart.id,
+            menuItemId: item.menuItemId,
+            variantId: item.variantId || null,
+            addonIds: item.addonIds.sort().join(','),
+            quantity: item.quantity,
+            notes: item.notes || null,
+          },
+        });
+      }
+    }
+
+    return this.getCart(tableId);
   }
 }

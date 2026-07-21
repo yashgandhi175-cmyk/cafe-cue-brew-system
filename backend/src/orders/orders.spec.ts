@@ -66,6 +66,15 @@ describe('Order Flow Logic & Verification (Mocked Unit Tests)', () => {
     jest.spyOn(prisma.auditLog, 'create').mockResolvedValue({} as any);
     jest.spyOn(prisma.couponUsage, 'findFirst').mockResolvedValue(null);
     jest.spyOn(prisma, '$executeRaw').mockResolvedValue(1);
+    jest.spyOn(prisma.tableSession, 'findFirst').mockResolvedValue(null);
+    jest.spyOn(prisma.tableSession, 'create').mockResolvedValue({ id: 'sess-1' } as any);
+    jest.spyOn(prisma.tableSession, 'update').mockResolvedValue({} as any);
+    jest.spyOn(prisma.customerCart, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prisma.customerCart, 'deleteMany').mockResolvedValue({ count: 1 });
+    jest.spyOn(prisma.creditLedger, 'create').mockResolvedValue({} as any);
+    jest.spyOn(prisma.creditLedger, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prisma.creditLedger, 'update').mockResolvedValue({} as any);
+    jest.spyOn(prisma.bill, 'findFirst').mockResolvedValue(null);
   });
 
   afterEach(() => {

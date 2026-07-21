@@ -95,9 +95,13 @@ export class BillingService {
         );
       }
 
-      let bill = await tx.bill.findFirst({
-        where: { orderId, status: BillStatus.DRAFT },
-      });
+      let bill = order.tableSessionId
+        ? await tx.bill.findFirst({
+            where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
+          })
+        : await tx.bill.findFirst({
+            where: { orderId, status: BillStatus.DRAFT },
+          });
 
       // If no draft bill, create one first
       if (!bill) {
@@ -216,23 +220,36 @@ export class BillingService {
       }
 
       // Check if bill is already finalized/paid/voided
-      const existingFinalized = await tx.bill.findFirst({
-        where: {
-          orderId,
-          status: {
-            in: [BillStatus.FINALIZED, BillStatus.PAID, BillStatus.VOIDED],
-          },
-        },
-      });
+      const existingFinalized = order.tableSessionId
+        ? await tx.bill.findFirst({
+            where: {
+              tableSessionId: order.tableSessionId,
+              status: {
+                in: [BillStatus.FINALIZED, BillStatus.PAID, BillStatus.VOIDED],
+              },
+            },
+          })
+        : await tx.bill.findFirst({
+            where: {
+              orderId,
+              status: {
+                in: [BillStatus.FINALIZED, BillStatus.PAID, BillStatus.VOIDED],
+              },
+            },
+          });
 
       if (existingFinalized) {
         return existingFinalized;
       }
 
       // Fetch the draft bill or create one if missing
-      let bill = await tx.bill.findFirst({
-        where: { orderId, status: BillStatus.DRAFT },
-      });
+      let bill = order.tableSessionId
+        ? await tx.bill.findFirst({
+            where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
+          })
+        : await tx.bill.findFirst({
+            where: { orderId, status: BillStatus.DRAFT },
+          });
 
       if (!bill) {
         bill = await tx.bill.create({

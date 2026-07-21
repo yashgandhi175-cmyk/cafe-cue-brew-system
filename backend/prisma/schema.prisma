@@ -51,6 +51,9 @@ model Staff {
   rejectedRedemptions  LoyaltyRedemptionRequest[] @relation("RedemptionRejectedBy")
   createdCoupons       Coupon[]
   campaignsCreated     Campaign[]
+  creditLedgersCreated CreditLedger[] @relation("CreditLedgerCreatedBy")
+  creditLedgersUpdated CreditLedger[] @relation("CreditLedgerUpdatedBy")
+  creditPaymentsReceived CreditPayment[]
 }
 
 model StaffSession {
@@ -224,6 +227,7 @@ model RestaurantTable {
   orders      Order[]
   waiterCalls WaiterCall[]
   qrToken     TableQrToken?
+  tableSessions TableSession[]
   
   @@index([isActive])
 }
@@ -263,6 +267,7 @@ model MenuItem {
   orderItems      OrderItem[]
   recipes         Recipe[]
   banners         Banner[]
+  cartItems       CustomerCartItem[]
 
   @@index([categoryId])
   @@index([available])
@@ -277,6 +282,7 @@ model MenuVariant {
   menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   recipes    Recipe[]
   orderItems OrderItem[]
+  cartItems  CustomerCartItem[]
   
   @@unique([menuItemId, name])
 }
@@ -351,6 +357,8 @@ model Customer {
   // Deprecated legacy counters (retained for reconciliation, do not use as source of truth)
   visitCount             Int                           @default(0)
   totalSpending          Decimal                       @default(0.0) @db.Decimal(12, 2)
+
+  creditLedgers          CreditLedger[]
 
   @@index([marketingConsent])
   @@index([status])
@@ -435,6 +443,8 @@ enum PaymentStatus {
   PAID
   PARTIALLY_PAID
   REFUNDED
+  PARTIAL
+  CREDIT
 }
 
 model Order {
@@ -470,6 +480,8 @@ model Order {
   cancelledById         String?
   cancelledAt           DateTime?
 
+  tableSessionId        String?
+  tableSession          TableSession?        @relation(fields: [tableSessionId], references: [id])
   customer              Customer?            @relation(fields: [customerId], references: [id])
   table                 RestaurantTable?     @relation(fields: [tableId], references: [id])
   createdBy             Staff?               @relation("CreatedByStaff", fields: [createdById], references: [id])
@@ -582,6 +594,8 @@ model Bill {
   finalizedAt             DateTime?
   createdAt               DateTime            @default(now())
   updatedAt               DateTime            @updatedAt
+  tableSessionId          String?
+  tableSession            TableSession?       @relation(fields: [tableSessionId], references: [id])
   order                   Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
   payments                Payment[]
   activeRedemptionRequest LoyaltyRedemptionRequest? @relation("BillActiveRedemptionRequest", fields: [activeRedemptionRequestId], references: [id], onDelete: SetNull)
@@ -1222,5 +1236,93 @@ model CampaignDeliveryLog {
   @@index([campaignId, status])
   @@index([customerId])
   @@index([createdAt])
+}
+
+model TableSession {
+  id        String          @id @default(uuid())
+  tableId   String
+  status    SessionStatus   @default(ACTIVE)
+  createdAt DateTime        @default(now())
+  closedAt  DateTime?
+  table     RestaurantTable @relation(fields: [tableId], references: [id])
+  orders    Order[]
+  bills     Bill[]
+}
+
+enum SessionStatus {
+  ACTIVE
+  CLOSED
+}
+
+model CustomerCart {
+  id        String             @id @default(uuid())
+  tableId   String             @unique
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  items     CustomerCartItem[]
+}
+
+model CustomerCartItem {
+  id           String       @id @default(uuid())
+  cartId       String
+  menuItemId   String
+  variantId    String?
+  addonIds     String // Comma-separated or JSON array string of addon IDs
+  quantity     Int
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  cart         CustomerCart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem     @relation(fields: [menuItemId], references: [id])
+  variant      MenuVariant? @relation(fields: [variantId], references: [id])
+}
+
+model CreditLedger {
+  id                String           @id @default(uuid())
+  customerId        String
+  invoiceNumber     String           @unique
+  invoiceDate       DateTime
+  billAmount        Decimal          @db.Decimal(10, 2)
+  outstandingAmount Decimal          @db.Decimal(10, 2)
+  creditDate        DateTime         @default(now())
+  dueDate           DateTime
+  creditType        CreditType       @default(CUSTOM)
+  notes             String?          @db.Text
+  settlementStatus  SettlementStatus @default(UNPAID)
+  createdById       String?
+  updatedById       String?
+  customer          Customer         @relation(fields: [customerId], references: [id])
+  payments          CreditPayment[]
+  createdBy         Staff?           @relation("CreditLedgerCreatedBy", fields: [createdById], references: [id])
+  updatedBy         Staff?           @relation("CreditLedgerUpdatedBy", fields: [updatedById], references: [id])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+enum CreditType {
+  WEEKLY
+  FIFTEEN_DAYS
+  MONTHLY
+  CUSTOM
+}
+
+enum SettlementStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+model CreditPayment {
+  id             String        @id @default(uuid())
+  creditLedgerId String
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod
+  reference      String?
+  paidAt         DateTime      @default(now())
+  receivedById   String
+  creditLedger   CreditLedger  @relation(fields: [creditLedgerId], references: [id], onDelete: Cascade)
+  receivedBy     Staff         @relation(fields: [receivedById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 

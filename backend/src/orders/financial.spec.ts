@@ -64,6 +64,17 @@ describe('Phase 5 Financial, Billing, and Payments Unit Tests', () => {
     prisma = module.get<PrismaService>(PrismaService);
   });
 
+  beforeEach(() => {
+    jest.spyOn(prisma.tableSession, 'findFirst').mockResolvedValue(null);
+    jest.spyOn(prisma.tableSession, 'create').mockResolvedValue({ id: 'sess-1' } as any);
+    jest.spyOn(prisma.tableSession, 'update').mockResolvedValue({} as any);
+    jest.spyOn(prisma.customerCart, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prisma.customerCart, 'deleteMany').mockResolvedValue({ count: 1 });
+    jest.spyOn(prisma.creditLedger, 'create').mockResolvedValue({} as any);
+    jest.spyOn(prisma.creditLedger, 'findUnique').mockResolvedValue(null);
+    jest.spyOn(prisma.creditLedger, 'update').mockResolvedValue({} as any);
+  });
+
   describe('1. FinancialCalculationService Calculations', () => {
     const settingsBase = {
       id: 'default',
@@ -505,6 +516,9 @@ describe('Phase 5 Financial, Billing, and Payments Unit Tests', () => {
           status: BillStatus.FINALIZED,
           grandTotal: 1000,
           financialVersion: 1,
+          order: {
+            customerId: 'customer-1',
+          },
         } as any),
       );
 

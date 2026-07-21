@@ -31,6 +31,9 @@ export class PaymentsService {
       amountTendered?: number;
       reference?: string;
       paymentIdempotencyKey?: string;
+      creditType?: 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM';
+      dueDate?: string;
+      notes?: string;
     },
   ) {
     if (staffRole === Role.WAITER) {
@@ -107,18 +110,17 @@ export class PaymentsService {
           throw new BadRequestException('Credit is currently disabled.');
         }
 
-        // 4. Calculate Authoritative Balance
+        // 4. Calculate Authoritative Balance (counting cash/card/upi/credit all as resolving the bill)
         const existingPayments = await tx.payment.findMany({
           where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED },
         });
 
-        const settledSum = existingPayments
-          .filter((p) => p.isSettled)
+        const totalResolvedSum = existingPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
 
         const grandTotal = Number(bill.grandTotal);
         const outstanding = this.calcService.roundToTwo(
-          grandTotal - settledSum,
+          grandTotal - totalResolvedSum,
         );
 
         if (outstanding <= 0) {
@@ -199,28 +201,66 @@ export class PaymentsService {
           },
         });
 
+        // 7.5 If method is CREDIT, create a CreditLedger entry
+        if (dto.method === PaymentMethod.CREDIT) {
+          if (!bill.order.customerId) {
+            throw new BadRequestException(
+              'A registered customer with a profile is required to settle on credit.',
+            );
+          }
+
+          let calculatedDueDate = new Date();
+          const creditType = dto.creditType || 'CUSTOM';
+          if (creditType === 'WEEKLY') {
+            calculatedDueDate.setDate(calculatedDueDate.getDate() + 7);
+          } else if (creditType === 'FIFTEEN_DAYS') {
+            calculatedDueDate.setDate(calculatedDueDate.getDate() + 15);
+          } else if (creditType === 'MONTHLY') {
+            calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
+          } else {
+            calculatedDueDate = dto.dueDate ? new Date(dto.dueDate) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+          }
+
+          await tx.creditLedger.create({
+            data: {
+              customerId: bill.order.customerId,
+              invoiceNumber: bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`,
+              invoiceDate: bill.finalizedAt || new Date(),
+              billAmount: bill.grandTotal,
+              outstandingAmount: finalSettledAmount,
+              dueDate: calculatedDueDate,
+              creditType: creditType,
+              notes: dto.notes || null,
+              settlementStatus: 'UNPAID',
+              createdById: staffId,
+              updatedById: staffId,
+            },
+          });
+        }
+
         // 8. Re-evaluate overall payments
         const allPayments = await tx.payment.findMany({
           where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED },
         });
 
-        const finalSettledSum = allPayments
-          .filter((p) => p.isSettled)
+        const finalResolvedSum = allPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
+
+        const hasCredit = allPayments.some((p) => p.method === PaymentMethod.CREDIT);
 
         let finalPaymentStatus: PaymentStatus = PaymentStatus.UNPAID;
         let finalBillStatus: BillStatus = BillStatus.FINALIZED;
 
-        if (finalSettledSum >= grandTotal) {
-          finalPaymentStatus = PaymentStatus.PAID;
+        if (finalResolvedSum >= grandTotal) {
+          finalPaymentStatus = hasCredit ? PaymentStatus.CREDIT : PaymentStatus.PAID;
           finalBillStatus = BillStatus.PAID;
-        } else if (finalSettledSum > 0) {
-          finalPaymentStatus = PaymentStatus.PARTIALLY_PAID;
+        } else if (finalResolvedSum > 0) {
+          finalPaymentStatus = PaymentStatus.PARTIAL;
           finalBillStatus = BillStatus.FINALIZED;
         }
 
         // Unexpected integrity check (Correction 3)
-        if (finalSettledSum > grandTotal) {
+        if (finalResolvedSum > grandTotal) {
           throw new ConflictException(
             'Financial integrity check failed: settled payments exceed grand total.',
           );
@@ -236,12 +276,46 @@ export class PaymentsService {
         });
 
         // Sync to Order
-        await tx.order.update({
-          where: { id: bill.orderId },
-          data: {
-            paymentStatus: finalPaymentStatus,
-          },
-        });
+        if (bill.tableSessionId) {
+          await tx.order.updateMany({
+            where: { tableSessionId: bill.tableSessionId },
+            data: {
+              paymentStatus: finalPaymentStatus,
+            },
+          });
+        } else {
+          await tx.order.update({
+            where: { id: bill.orderId },
+            data: {
+              paymentStatus: finalPaymentStatus,
+            },
+          });
+        }
+
+        // 8.5 Close TableSession & Release table & Clear cart if bill is fully closed/settled
+        if (finalBillStatus === BillStatus.PAID) {
+          if (bill.tableSessionId) {
+            await tx.tableSession.update({
+              where: { id: bill.tableSessionId },
+              data: {
+                status: 'CLOSED',
+                closedAt: new Date(),
+              },
+            });
+          }
+
+          if (bill.order.tableId) {
+            await tx.restaurantTable.update({
+              where: { id: bill.order.tableId },
+              data: { status: 'AVAILABLE' },
+            });
+
+            // Clear Customer Cart
+            await tx.customerCart.deleteMany({
+              where: { tableId: bill.order.tableId },
+            });
+          }
+        }
 
         // AuditLog
         await tx.auditLog.create({

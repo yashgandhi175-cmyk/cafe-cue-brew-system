@@ -26,7 +26,7 @@ function TableQrCard({ table }: { table: RestaurantTable }) {
   const [qrUrl, setQrUrl] = useState('');
 
   const publicUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const customerMenuUrl = `${publicUrl}/menu?table=${table.id}&token=${table.qrToken?.token || ''}`;
+  const customerMenuUrl = `${publicUrl}/menu.html?table=${table.id}&token=${table.qrToken?.token || ''}`;
 
   useEffect(() => {
     if (table.qrToken?.token) {

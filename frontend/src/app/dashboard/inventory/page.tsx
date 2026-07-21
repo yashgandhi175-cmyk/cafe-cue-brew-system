@@ -536,7 +536,7 @@ export default function InventoryPage() {
             <div className="bg-white border border-[#EAD8C0]/20 rounded-2xl p-5 shadow-sm">
               <span className="text-[10px] font-bold text-gray-400 uppercase block tracking-wider">Estimated Stock Value</span>
               <span className="text-2xl font-black text-[#3C2A21] mt-1 block">
-                ₹{valueEstimate?.totalEstimatedValue?.toFixed(2) || '0.00'}
+                ₹{valueEstimate?.totalEstimatedValue !== undefined && valueEstimate?.totalEstimatedValue !== null ? Number(valueEstimate.totalEstimatedValue).toFixed(2) : '0.00'}
               </span>
               <span className="text-[10px] text-gray-400 block mt-2">Weighted average calculation</span>
             </div>
@@ -544,17 +544,17 @@ export default function InventoryPage() {
             <div className="bg-white border border-[#EAD8C0]/20 rounded-2xl p-5 shadow-sm">
               <span className="text-[10px] font-bold text-gray-400 uppercase block tracking-wider">Food Cost Percentage</span>
               <span className="text-2xl font-black text-[#8F6A50] mt-1 block">
-                {foodCost?.foodCostPercentage?.toFixed(1) || '0.0'}%
+                {foodCost?.foodCostPercentage !== undefined && foodCost?.foodCostPercentage !== null ? Number(foodCost.foodCostPercentage).toFixed(1) : '0.0'}%
               </span>
               <span className="text-[10px] text-gray-400 block mt-2">
-                Sales: ₹{foodCost?.totalSales?.toFixed(0) || '0'} | Food Cost: ₹{foodCost?.totalFoodCost?.toFixed(0) || '0'}
+                Sales: ₹{foodCost?.totalSales !== undefined && foodCost?.totalSales !== null ? Number(foodCost.totalSales).toFixed(0) : '0'} | Food Cost: ₹{foodCost?.totalFoodCost !== undefined && foodCost?.totalFoodCost !== null ? Number(foodCost.totalFoodCost).toFixed(0) : '0'}
               </span>
             </div>
 
             <div className="bg-white border border-[#EAD8C0]/20 rounded-2xl p-5 shadow-sm">
               <span className="text-[10px] font-bold text-gray-400 uppercase block tracking-wider">Wastage Analytics</span>
               <span className="text-2xl font-black text-rose-600 mt-1 block">
-                ₹{wastageAnalytics?.totalWastageCost?.toFixed(0) || '0'}
+                ₹{wastageAnalytics?.totalWastageCost !== undefined && wastageAnalytics?.totalWastageCost !== null ? Number(wastageAnalytics.totalWastageCost).toFixed(0) : '0'}
               </span>
               <span className="text-[10px] text-gray-400 block mt-2">For selected time range</span>
             </div>
@@ -562,10 +562,10 @@ export default function InventoryPage() {
             <div className="bg-white border border-[#EAD8C0]/20 rounded-2xl p-5 shadow-sm">
               <span className="text-[10px] font-bold text-gray-400 uppercase block tracking-wider">Estimated Operating Contribution</span>
               <span className="text-2xl font-black text-emerald-600 mt-1 block">
-                ₹{contribution?.estimatedOperatingContribution?.toFixed(0) || '0'}
+                ₹{contribution?.estimatedOperatingContribution !== undefined && contribution?.estimatedOperatingContribution !== null ? Number(contribution.estimatedOperatingContribution).toFixed(0) : '0'}
               </span>
               <span className="text-[10px] text-gray-400 block mt-2">
-                Contribution margin: {contribution?.contributionMarginPercent?.toFixed(1) || '0.0'}%
+                Contribution margin: {contribution?.contributionMarginPercent !== undefined && contribution?.contributionMarginPercent !== null ? Number(contribution.contributionMarginPercent).toFixed(1) : '0.0'}%
               </span>
             </div>
           </div>
@@ -667,10 +667,10 @@ export default function InventoryPage() {
                         </span>
                       </td>
                       <td className="py-3 px-5 text-right text-gray-600 font-mono">
-                        {ing.averageCost !== undefined && ing.averageCost !== null ? `₹${ing.averageCost.toFixed(2)}` : 'N/A'}
+                        {ing.averageCost !== undefined && ing.averageCost !== null ? `₹${Number(ing.averageCost).toFixed(2)}` : 'N/A'}
                       </td>
                       <td className="py-3 px-5 text-right text-gray-600 font-mono">
-                        {ing.lastPurchaseCost !== undefined && ing.lastPurchaseCost !== null ? `₹${ing.lastPurchaseCost.toFixed(2)}` : 'N/A'}
+                        {ing.lastPurchaseCost !== undefined && ing.lastPurchaseCost !== null ? `₹${Number(ing.lastPurchaseCost).toFixed(2)}` : 'N/A'}
                       </td>
                       <td className="py-3 px-5 text-gray-600">{ing.preferredSupplier?.name || '-'}</td>
                       <td className="py-3 px-5 text-right space-x-1">
@@ -768,7 +768,7 @@ export default function InventoryPage() {
                           {r.quantity} {r.ingredient.unit}
                         </td>
                         <td className="py-3 px-5 text-right text-gray-600 font-mono">
-                          {cost !== null ? `₹${cost.toFixed(2)}` : 'N/A'}
+                          {cost !== null ? `₹${Number(cost).toFixed(2)}` : 'N/A'}
                         </td>
                         <td className="py-3 px-5 text-right space-x-1">
                           <Button
@@ -928,7 +928,7 @@ export default function InventoryPage() {
                       <td className="py-3 px-5 font-mono font-bold text-gray-800">{p.purchaseNumber}</td>
                       <td className="py-3 px-5 text-gray-600">{p.supplier.name}</td>
                       <td className="py-3 px-5 text-gray-500">{new Date(p.purchaseDate).toLocaleDateString()}</td>
-                      <td className="py-3 px-5 text-right font-black text-gray-800">₹{p.grandTotal.toFixed(2)}</td>
+                      <td className="py-3 px-5 text-right font-black text-gray-800">₹{Number(p.grandTotal).toFixed(2)}</td>
                       <td className="py-3 px-5 text-center">
                         <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                           p.status === 'FINALIZED'

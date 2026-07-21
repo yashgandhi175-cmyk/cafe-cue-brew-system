@@ -66,6 +66,9 @@ import { join } from 'path';
             return require('fs').existsSync(prodPath) ? prodPath : devPath;
           })(),
           exclude: ['/api{/*path}'],
+          serveStaticOptions: {
+            extensions: ['html'],
+          },
         },
       ],
     }),

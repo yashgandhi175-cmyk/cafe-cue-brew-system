@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -107,9 +108,9 @@ export default function PosConsolePage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const [catRes, itemRes, tableRes] = await Promise.all([
-        fetch('http://localhost:3000/api/categories', { headers }),
-        fetch('http://localhost:3000/api/menu-items', { headers }),
-        fetch('http://localhost:3000/api/tables', { headers }),
+        fetch(`${API_URL}/categories`, { headers }),
+        fetch(`${API_URL}/menu/items`, { headers }),
+        fetch(`${API_URL}/tables`, { headers }),
       ]);
 
       if (catRes.status === 401 || itemRes.status === 401) {
@@ -300,7 +301,7 @@ export default function PosConsolePage() {
         addonIds: c.selectedAddons.map((a) => a.id),
         quantity: c.quantity,
       }));
-      const res = await fetch('http://localhost:3000/api/public/coupons/validate', {
+      const res = await fetch(`${API_URL}/public/coupons/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -338,7 +339,7 @@ export default function PosConsolePage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch public active coupons
-      const cRes = await fetch('http://localhost:3000/api/public/coupons', { headers });
+      const cRes = await fetch(`${API_URL}/public/coupons`, { headers });
       const couponsList = await cRes.json();
 
       // 2. Validate each coupon against current cart in parallel
@@ -352,7 +353,7 @@ export default function PosConsolePage() {
       const validatedList = await Promise.all(
         couponsList.map(async (c: any) => {
           try {
-            const vRes = await fetch('http://localhost:3000/api/public/coupons/validate', {
+            const vRes = await fetch(`${API_URL}/public/coupons/validate`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -449,7 +450,7 @@ export default function PosConsolePage() {
         idempotencyKey: 'POS_' + Date.now() + '_' + Math.random().toString(36).substring(7),
       };
 
-      const res = await fetch('http://localhost:3000/api/orders/pos', {
+      const res = await fetch(`${API_URL}/orders/pos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -493,7 +494,7 @@ export default function PosConsolePage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-4rem)] bg-[#FAF8F5] text-[#3C2A21]">
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-10rem)] lg:h-[calc(100vh-8rem)] overflow-hidden bg-[#FAF8F5] text-[#3C2A21]">
       {/* LEFT: Menu list */}
       <div className="flex-1 p-6 lg:border-r border-[#EAD8C0]/40 overflow-y-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -598,8 +599,8 @@ export default function PosConsolePage() {
       </div>
 
       {/* RIGHT: Cart Details */}
-      <div className="w-full lg:w-[420px] bg-white p-6 shadow-xl flex flex-col justify-between overflow-y-auto">
-        <div>
+      <div className="w-full lg:w-[420px] bg-white shadow-xl flex flex-col h-full overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
           <div className="flex items-center justify-between border-b border-[#EAD8C0]/30 pb-4 mb-4">
             <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-[#8F6A50]" /> CART
@@ -870,7 +871,7 @@ export default function PosConsolePage() {
         </div>
 
         {/* CART TOTALS */}
-        <div className="border-t border-[#EAD8C0]/30 pt-4 mt-6">
+        <div className="border-t border-[#EAD8C0]/30 p-6 bg-white shrink-0">
           <div className="flex justify-between items-center text-sm font-semibold mb-2">
             <span>Subtotal:</span>
             <span>₹{subtotal.toFixed(2)}</span>
@@ -1131,7 +1132,7 @@ export default function PosConsolePage() {
                                 addonIds: item.selectedAddons.map((a) => a.id),
                                 quantity: item.quantity,
                               }));
-                              fetch('http://localhost:3000/api/public/coupons/validate', {
+                              fetch(`${API_URL}/public/coupons/validate`, {
                                 method: 'POST',
                                 headers: {
                                   'Content-Type': 'application/json',

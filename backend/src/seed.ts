@@ -15,12 +15,16 @@ interface SeedItem {
 }
 
 export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
+  const settingsCount = await prisma.restaurantSettings.count();
   const staffCount = await prisma.staff.count();
-  if (staffCount > 0) {
+  const categoryCount = await prisma.category.count();
+  const menuItemCount = await prisma.menuItem.count();
+
+  if (settingsCount > 0 && staffCount > 0 && categoryCount > 0 && menuItemCount > 0) {
     return;
   }
 
-  console.log('No staff profiles found. Seeding database...');
+  console.log('Database missing core records. Running seeder...');
 
   // 1. Create Default Restaurant Settings if not present
   const settings = await prisma.restaurantSettings.upsert({
@@ -123,7 +127,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     where: { phone: ownerPhone },
   });
 
-  if (!existingOwner) {
+  if (staffCount === 0 && !existingOwner) {
     const pinHash = await bcrypt.hash('1234', 10);
     const owner = await prisma.staff.create({
       data: {

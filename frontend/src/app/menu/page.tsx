@@ -165,6 +165,7 @@ function MenuPageContent() {
 
   // Cart & Customization States
   const [cart, setCart] = useState<{ [key: string]: CartItem }>({});
+  const [cartModalOpen, setCartModalOpen] = useState(false);
   const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
   const [customVariant, setCustomVariant] = useState<{ id: string; name: string; price: string } | null>(null);
   const [customAddons, setCustomAddons] = useState<Array<{ id: string; name: string; price: string }>>([]);
@@ -254,13 +255,33 @@ function MenuPageContent() {
         }
         setIdempotencyKey(currentKey);
 
-        // Load Persistent Cart scoped to Table ID
-        const storedCart = localStorage.getItem(`ccb_cart_${tableId}`);
-        if (storedCart) {
-          try {
-            setCart(JSON.parse(storedCart));
-          } catch {
-            // ignore
+        // Load Persistent Cart scoped to Table ID from Backend (fallback to LocalStorage)
+        try {
+          const cartRes = await axios.get(`${API_URL}/public/orders/cart/${tableId}`);
+          if (cartRes.data && cartRes.data.items) {
+            const backendCart: { [key: string]: CartItem } = {};
+            cartRes.data.items.forEach((item: any) => {
+              const addonIdsStr = item.selectedAddons.map((a: any) => a.id).sort().join('-');
+              const cartKey = `${item.menuItem.id}_${item.selectedVariant?.id || 'base'}_${addonIdsStr}`;
+              backendCart[cartKey] = {
+                menuItem: item.menuItem,
+                selectedVariant: item.selectedVariant,
+                selectedAddons: item.selectedAddons,
+                quantity: item.quantity,
+                notes: item.notes || '',
+              };
+            });
+            setCart(backendCart);
+            localStorage.setItem(`ccb_cart_${tableId}`, JSON.stringify(backendCart));
+          }
+        } catch {
+          const storedCart = localStorage.getItem(`ccb_cart_${tableId}`);
+          if (storedCart) {
+            try {
+              setCart(JSON.parse(storedCart));
+            } catch {
+              // ignore
+            }
           }
         }
       } catch (err: unknown) {
@@ -313,10 +334,24 @@ function MenuPageContent() {
     return () => clearInterval(timer);
   }, [waiterCallCooldown]);
 
-  // Save Cart to LocalStorage
-  const saveCart = (newCart: { [key: string]: CartItem }) => {
+  // Save Cart to LocalStorage and Sync to Backend
+  const saveCart = async (newCart: { [key: string]: CartItem }) => {
     setCart(newCart);
     localStorage.setItem(`ccb_cart_${tableId}`, JSON.stringify(newCart));
+    try {
+      const itemsPayload = Object.values(newCart).map((ci) => ({
+        menuItemId: ci.menuItem.id,
+        variantId: ci.selectedVariant?.id,
+        addonIds: ci.selectedAddons.map((a) => a.id),
+        quantity: ci.quantity,
+        notes: ci.notes || undefined,
+      }));
+      await axios.put(`${API_URL}/public/orders/cart/${tableId}`, {
+        items: itemsPayload,
+      });
+    } catch {
+      // ignore
+    }
   };
 
   // Add Item Handler
@@ -968,9 +1003,12 @@ function MenuPageContent() {
         )}
       </div>
 
-      {/* Floating Checkout Bar */}
+      {/* Floating Cart Button/Bar */}
       {Object.keys(cart).length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-stone-200 shadow-2xl p-4 z-40 flex items-center justify-between pb-6">
+        <div
+          onClick={() => setCartModalOpen(true)}
+          className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#FDFBF7] border-t border-stone-200 shadow-2xl p-4 z-40 flex items-center justify-between pb-6 cursor-pointer hover:bg-stone-50 transition-colors"
+        >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#5C3A21] rounded-full flex items-center justify-center text-white relative shadow-md">
               <ShoppingBag className="w-5 h-5" />
@@ -979,19 +1017,109 @@ function MenuPageContent() {
               </span>
             </div>
             <div>
-              <p className="text-stone-400 text-xs font-semibold uppercase tracking-wider">Estimated Total</p>
-              <p className="text-[#A0522D] font-black text-base">₹{totals.grandTotal}</p>
+              <p className="text-stone-400 text-[10px] font-bold uppercase tracking-wider">Review Cart</p>
+              <p className="text-[#A0522D] font-black text-sm">₹{totals.grandTotal}</p>
             </div>
           </div>
 
           <Button
-            onClick={() => setCheckoutOpen(true)}
-            className="bg-[#5C3A21] hover:bg-[#A0522D] text-white font-bold px-6 py-2.5 rounded-full flex items-center gap-2 shadow-lg"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCartModalOpen(true);
+            }}
+            className="bg-[#5C3A21] hover:bg-[#A0522D] text-white font-bold px-5 py-2 rounded-full flex items-center gap-1.5 shadow-lg"
           >
-            <span>Proceed to Checkout</span>
-            <ChevronRight className="w-4.5 h-4.5" />
+            <span>View Cart</span>
+            <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
+      )}
+
+      {/* Cart Review CustomModal */}
+      {cartModalOpen && (
+        <CustomModal
+          isOpen={true}
+          onClose={() => setCartModalOpen(false)}
+          title="Review Your Cart"
+          description="Manage quantities or checkout"
+        >
+          <div className="p-4 space-y-4 max-h-[420px] overflow-y-auto">
+            {Object.keys(cart).length === 0 ? (
+              <p className="text-stone-500 text-center py-6 font-semibold">Your cart is empty.</p>
+            ) : (
+              <div className="divide-y divide-stone-100">
+                {Object.entries(cart).map(([key, ci]) => {
+                  const itemUnit = ci.selectedVariant ? Number(ci.selectedVariant.price) : Number(ci.menuItem.basePrice);
+                  const itemAddon = ci.selectedAddons.reduce((acc, a) => acc + Number(a.price), 0);
+                  return (
+                    <div key={key} className="py-3 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-stone-800 truncate">{ci.menuItem.name}</p>
+                        {ci.selectedVariant && (
+                          <p className="text-stone-400 text-[10px] font-bold mt-0.5">Size: {ci.selectedVariant.name}</p>
+                        )}
+                        {ci.selectedAddons.length > 0 && (
+                          <p className="text-[#A0522D] text-[10px] font-semibold mt-0.5">
+                            Addons: {ci.selectedAddons.map((a) => a.name).join(', ')}
+                          </p>
+                        )}
+                        {ci.notes && (
+                          <p className="text-stone-400 text-[10px] italic mt-0.5">Note: "{ci.notes}"</p>
+                        )}
+                      </div>
+
+                      {/* Quantity Controls */}
+                      <div className="flex items-center gap-2 bg-stone-50 rounded-full border px-2 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCartQuantity(key, -1)}
+                          className="text-stone-400 hover:text-stone-600 p-1"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="font-extrabold text-stone-700 w-4 text-center">{ci.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateCartQuantity(key, 1)}
+                          className="text-[#A0522D] hover:text-[#5C3A21] p-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <span className="font-extrabold text-stone-800 shrink-0">₹{(itemUnit + itemAddon) * ci.quantity}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-stone-200 flex justify-between items-center">
+              <span className="font-bold text-[#5C3A21]">Estimated Total:</span>
+              <span className="font-black text-lg text-[#A0522D]">₹{totals.grandTotal}</span>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setCartModalOpen(false)}
+                className="flex-1 rounded-full border-stone-300 font-bold"
+              >
+                Continue
+              </Button>
+              <Button
+                disabled={Object.keys(cart).length === 0}
+                onClick={() => {
+                  setCartModalOpen(false);
+                  setCheckoutOpen(true);
+                }}
+                className="flex-1 bg-[#5C3A21] hover:bg-[#A0522D] text-white rounded-full font-bold shadow-md"
+              >
+                Checkout
+              </Button>
+            </div>
+          </div>
+        </CustomModal>
       )}
 
       {/* Customization CustomModal */}

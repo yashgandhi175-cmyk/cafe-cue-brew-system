@@ -22,6 +22,7 @@ import {
   Wallet,
   Ticket,
   Image,
+  BookOpen,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -148,6 +149,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       roles: ['OWNER', 'MANAGER'],
     },
     {
+      name: 'Credit Ledger',
+      href: '/dashboard/credits',
+      icon: BookOpen,
+      roles: ['OWNER', 'MANAGER', 'CASHIER'],
+    },
+    {
       name: 'Reports & Analytics',
       href: '/dashboard/reports',
       icon: BarChart3,
@@ -184,7 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex bg-[#FAF8F5]">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:w-64 bg-[#3C2A21] text-[#EAD8C0] flex-col justify-between p-6 shadow-xl border-r border-[#3C2A21]/30">
+      <aside className="hidden md:flex md:w-64 bg-[#3C2A21] text-[#EAD8C0] flex-col justify-between p-6 shadow-xl border-r border-[#3C2A21]/30 h-screen sticky top-0">
         <div className="space-y-8">
           {/* Logo */}
           <div className="flex items-center gap-2.5 px-2">

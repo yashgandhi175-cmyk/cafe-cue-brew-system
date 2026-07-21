@@ -1064,7 +1064,7 @@ export default function OrdersPage() {
                           reason: cancellationReason,
                           customReason: cancellationReason === 'OTHER' ? customCancelReasonText : undefined,
                         })}
-                        className="bg-red-650 hover:bg-red-750 text-white font-bold px-3 py-2 rounded-lg leading-none"
+                        className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-2 rounded-lg leading-none"
                       >
                         Cancel
                       </Button>

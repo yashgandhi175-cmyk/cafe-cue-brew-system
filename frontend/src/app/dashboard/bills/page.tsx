@@ -1,5 +1,7 @@
 'use client';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { jsPDF } from 'jspdf';
@@ -98,6 +100,9 @@ export default function SettlementsPage() {
   const [payAmount, setPayAmount] = useState<number>(0);
   const [cashTendered, setCashTendered] = useState<number>(0);
   const [payReference, setPayReference] = useState('');
+  const [creditType, setCreditType] = useState<'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM'>('FIFTEEN_DAYS');
+  const [dueDate, setDueDate] = useState<string>('');
+  const [remarks, setRemarks] = useState<string>('');
 
   // Owner completion override inputs
   const [useOwnerOverride, setUseOwnerOverride] = useState(false);
@@ -159,7 +164,7 @@ export default function SettlementsPage() {
       const token = localStorage.getItem('ccb_token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const profileRes = await fetch(`http://localhost:3000/api/customers/${customerId}/loyalty`, { headers });
+      const profileRes = await fetch(`${API_URL}/customers/${customerId}/loyalty`, { headers });
       if (profileRes.ok) {
         const profile = await profileRes.json();
         setLoyaltyProfile(profile);
@@ -167,7 +172,7 @@ export default function SettlementsPage() {
 
       const activeBill = order.bills.find((b) => b.status === 'DRAFT');
       if (activeBill) {
-        const requestsRes = await fetch(`http://localhost:3000/api/loyalty/redemption-requests?billId=${activeBill.id}`, { headers });
+        const requestsRes = await fetch(`${API_URL}/loyalty/redemption-requests?billId=${activeBill.id}`, { headers });
         if (requestsRes.ok) {
           const requests = await requestsRes.json();
           setRedemptionRequests(requests);
@@ -192,7 +197,7 @@ export default function SettlementsPage() {
     try {
       setSubmitting(true);
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch('http://localhost:3000/api/loyalty/redemption-requests', {
+      const res = await fetch(`${API_URL}/loyalty/redemption-requests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -222,7 +227,7 @@ export default function SettlementsPage() {
     try {
       setSubmitting(true);
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`http://localhost:3000/api/loyalty/redemption-requests/${requestId}/approve`, {
+      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/approve`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -241,7 +246,7 @@ export default function SettlementsPage() {
     try {
       setSubmitting(true);
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`http://localhost:3000/api/loyalty/redemption-requests/${requestId}/reject`, {
+      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/reject`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -260,7 +265,7 @@ export default function SettlementsPage() {
     try {
       setSubmitting(true);
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`http://localhost:3000/api/loyalty/redemption-requests/${requestId}/cancel`, {
+      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/cancel`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -284,7 +289,7 @@ export default function SettlementsPage() {
       }
 
       const headers = { Authorization: `Bearer ${token}` };
-      const res = await fetch('http://localhost:3000/api/orders?limit=100', { headers });
+      const res = await fetch(`${API_URL}/orders?limit=100`, { headers });
 
       if (res.status === 401) {
         router.push('/login');
@@ -294,9 +299,9 @@ export default function SettlementsPage() {
       const data = await res.json();
       // Parse list to fetch complete bill details too
       const parsedOrders: Order[] = [];
-      for (const ord of data.orders || []) {
+      for (const ord of data.data || []) {
         // Fetch full order by ID to include bills and payments relation snapshots
-        const fullRes = await fetch(`http://localhost:3000/api/orders/${ord.id}`, { headers });
+        const fullRes = await fetch(`${API_URL}/orders/${ord.id}`, { headers });
         if (fullRes.ok) {
           parsedOrders.push(await fullRes.json());
         }
@@ -323,7 +328,7 @@ export default function SettlementsPage() {
 
     try {
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`http://localhost:3000/api/billing/orders/${selectedOrder.id}/discount`, {
+      const res = await fetch(`${API_URL}/billing/orders/${selectedOrder.id}/discount`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -362,7 +367,7 @@ export default function SettlementsPage() {
 
     try {
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`http://localhost:3000/api/billing/orders/${selectedOrder.id}/finalize`, {
+      const res = await fetch(`${API_URL}/billing/orders/${selectedOrder.id}/finalize`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -402,7 +407,7 @@ export default function SettlementsPage() {
         throw new Error('Please finalize the bill before recording payments.');
       }
 
-      const res = await fetch('http://localhost:3000/api/payments', {
+      const res = await fetch(`${API_URL}/payments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -415,6 +420,9 @@ export default function SettlementsPage() {
           amountTendered: payMethod === 'CASH' ? Number(cashTendered) : undefined,
           reference: payReference.trim() || undefined,
           paymentIdempotencyKey: 'PAY_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+          creditType: payMethod === 'CREDIT' ? creditType : undefined,
+          dueDate: payMethod === 'CREDIT' && creditType === 'CUSTOM' ? dueDate || undefined : undefined,
+          notes: payMethod === 'CREDIT' ? remarks.trim() || undefined : undefined,
         }),
       });
 
@@ -449,7 +457,7 @@ export default function SettlementsPage() {
         payload.overrideReason = ownerOverrideReason.trim();
       }
 
-      const res = await fetch(`http://localhost:3000/api/orders/${selectedOrder.id}/status`, {
+      const res = await fetch(`${API_URL}/orders/${selectedOrder.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -485,9 +493,19 @@ export default function SettlementsPage() {
     }
 
     try {
+      let totalHeight = 50 + 70; // Header & footer base height in mm
+      selectedOrder.items.forEach((item) => {
+        totalHeight += 4;
+        if (item.variantNameSnapshot) totalHeight += 3.5;
+        if ((item as any).addons && (item as any).addons.length > 0) {
+          totalHeight += (item as any).addons.length * 3.5;
+        }
+      });
+      totalHeight += 20; // safety margin
+
       const doc = new jsPDF({
         unit: 'mm',
-        format: [80, 200], // 80mm thermal receipt format
+        format: [80, Math.max(200, totalHeight)], // dynamic height based on item list length
       });
 
       // Header
@@ -517,21 +535,40 @@ export default function SettlementsPage() {
       // Items header
       doc.setFont('Helvetica', 'bold');
       doc.text('Item', 5, 50);
-      doc.text('Qty', 48, 50);
-      doc.text('Price', 58, 50);
-      doc.text('Total', 70, 50);
+      doc.text('Qty', 52, 50, { align: 'right' });
+      doc.text('Price', 63, 50, { align: 'right' });
+      doc.text('Total', 75, 50, { align: 'right' });
       doc.setFont('Helvetica', 'normal');
       doc.text('------------------------------------------------------------', 40, 53, { align: 'center' });
 
       let y = 57;
       selectedOrder.items.forEach((item) => {
         // Truncate item name if too long for 80mm roll
-        const name = item.nameSnapshot.length > 20 ? item.nameSnapshot.substring(0, 18) + '..' : item.nameSnapshot;
+        const name = item.nameSnapshot.length > 18 ? item.nameSnapshot.substring(0, 16) + '..' : item.nameSnapshot;
         doc.text(name, 5, y);
-        doc.text(String(item.quantity), 49, y);
-        doc.text(String(item.priceSnapshot), 58, y);
-        doc.text(String(item.totalPrice), 70, y);
+        doc.text(String(item.quantity), 52, y, { align: 'right' });
+        doc.text(String(Number(item.priceSnapshot).toFixed(0)), 63, y, { align: 'right' });
+        doc.text(String(Number(item.totalPrice).toFixed(0)), 75, y, { align: 'right' });
         y += 4;
+
+        // Print variant if any
+        if (item.variantNameSnapshot) {
+          doc.setFontSize(7);
+          doc.text(`  - ${item.variantNameSnapshot}`, 5, y);
+          y += 3.5;
+        }
+
+        // Print addons if any
+        if ((item as any).addons && (item as any).addons.length > 0) {
+          doc.setFontSize(7);
+          (item as any).addons.forEach((addon: any) => {
+            doc.text(`  + ${addon.nameSnapshot} (+Rs.${Number(addon.priceSnapshot).toFixed(0)})`, 5, y);
+            y += 3.5;
+          });
+        }
+        
+        // Reset font size
+        doc.setFontSize(8);
       });
 
       doc.text('------------------------------------------------------------', 40, y, { align: 'center' });
@@ -539,7 +576,7 @@ export default function SettlementsPage() {
 
       // Summary
       doc.text(`Subtotal:`, 40, y);
-      doc.text(`₹${Number(currentBill.subtotal).toFixed(2)}`, 70, y);
+      doc.text(`Rs.${Number(currentBill.subtotal).toFixed(2)}`, 75, y, { align: 'right' });
       y += 4;
       const loyaltyDisc = Number((currentBill as any).loyaltyDiscount || 0);
       const couponDisc = Number((currentBill as any).couponDiscount || 0);
@@ -547,46 +584,46 @@ export default function SettlementsPage() {
 
       if (couponDisc > 0) {
         doc.text(`Coupon Disc:`, 40, y);
-        doc.text(`-₹${couponDisc.toFixed(2)}`, 70, y);
+        doc.text(`-Rs.${couponDisc.toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (loyaltyDisc > 0) {
         doc.text(`Loyalty Disc:`, 40, y);
-        doc.text(`-₹${loyaltyDisc.toFixed(2)}`, 70, y);
+        doc.text(`-Rs.${loyaltyDisc.toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (manualDisc > 0) {
         doc.text(`Manual Disc:`, 40, y);
-        doc.text(`-₹${manualDisc.toFixed(2)}`, 70, y);
+        doc.text(`-Rs.${manualDisc.toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (Number(currentBill.cgst) > 0) {
         doc.text(`CGST (2.5%):`, 40, y);
-        doc.text(`₹${Number(currentBill.cgst).toFixed(2)}`, 70, y);
+        doc.text(`Rs.${Number(currentBill.cgst).toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
         doc.text(`SGST (2.5%):`, 40, y);
-        doc.text(`₹${Number(currentBill.sgst).toFixed(2)}`, 70, y);
+        doc.text(`Rs.${Number(currentBill.sgst).toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (Number(currentBill.serviceCharge) > 0) {
         doc.text(`Service Charge:`, 40, y);
-        doc.text(`₹${Number(currentBill.serviceCharge).toFixed(2)}`, 70, y);
+        doc.text(`Rs.${Number(currentBill.serviceCharge).toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (Number(currentBill.nightCharge) > 0) {
         doc.text(`Night Surcharge:`, 40, y);
-        doc.text(`₹${Number(currentBill.nightCharge).toFixed(2)}`, 70, y);
+        doc.text(`Rs.${Number(currentBill.nightCharge).toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       if (Number(currentBill.roundOff) !== 0) {
         doc.text(`Round Off:`, 40, y);
-        doc.text(`₹${Number(currentBill.roundOff).toFixed(2)}`, 70, y);
+        doc.text(`Rs.${Number(currentBill.roundOff).toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
 
       doc.setFont('Helvetica', 'bold');
       doc.text(`GRAND TOTAL:`, 40, y);
-      doc.text(`₹${Number(currentBill.grandTotal).toFixed(2)}`, 70, y);
+      doc.text(`Rs.${Number(currentBill.grandTotal).toFixed(2)}`, 75, y, { align: 'right' });
       y += 5;
 
       // Payment Summary
@@ -600,15 +637,15 @@ export default function SettlementsPage() {
       const outstandingSum = Math.max(0, Number(currentBill.grandTotal) - settledSum);
 
       doc.text(`Total Settled:`, 40, y);
-      doc.text(`₹${settledSum.toFixed(2)}`, 70, y);
+      doc.text(`Rs.${settledSum.toFixed(2)}`, 75, y, { align: 'right' });
       y += 4;
       if (creditDueSum > 0) {
         doc.text(`CREDIT DUE:`, 40, y);
-        doc.text(`₹${creditDueSum.toFixed(2)}`, 70, y);
+        doc.text(`Rs.${creditDueSum.toFixed(2)}`, 75, y, { align: 'right' });
         y += 4;
       }
       doc.text(`Outstanding:`, 40, y);
-      doc.text(`₹${outstandingSum.toFixed(2)}`, 70, y);
+      doc.text(`Rs.${outstandingSum.toFixed(2)}`, 75, y, { align: 'right' });
       y += 5;
 
       doc.text('------------------------------------------------------------', 40, y, { align: 'center' });
@@ -633,7 +670,7 @@ export default function SettlementsPage() {
     const matchesFilter =
       paymentFilter === 'ALL' || o.paymentStatus === paymentFilter;
 
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && o.status !== 'CANCELLED' && o.status !== 'VOIDED';
   });
 
   if (loading) {
@@ -1156,7 +1193,7 @@ export default function SettlementsPage() {
                     </div>
                   )}
 
-                  {payMethod !== 'CASH' && (
+                  {payMethod !== 'CASH' && payMethod !== 'CREDIT' && (
                     <div className="text-xs">
                       <label className="font-bold text-gray-400 block mb-1">Reference (TXN / Card ID)</label>
                       <input
@@ -1166,6 +1203,60 @@ export default function SettlementsPage() {
                         value={payReference}
                         onChange={(e) => setPayReference(e.target.value)}
                       />
+                    </div>
+                  )}
+
+                  {payMethod === 'CREDIT' && (
+                    <div className="space-y-2 text-xs bg-amber-50 p-3 rounded-xl">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="font-bold text-amber-800 block mb-1">Credit Period</label>
+                          <select
+                            className="w-full p-1.5 border border-amber-300 rounded-lg focus:outline-none bg-white font-bold text-[#3C2A21]"
+                            value={creditType}
+                            onChange={(e) => setCreditType(e.target.value as any)}
+                          >
+                            <option value="WEEKLY">Weekly (7 Days)</option>
+                            <option value="FIFTEEN_DAYS">15 Days</option>
+                            <option value="MONTHLY">Monthly (30 Days)</option>
+                            <option value="CUSTOM">Custom Due Date</option>
+                          </select>
+                        </div>
+                        {creditType === 'CUSTOM' ? (
+                          <div>
+                            <label className="font-bold text-amber-800 block mb-1">Due Date</label>
+                            <input
+                              type="date"
+                              className="w-full p-1 border border-amber-300 rounded-lg focus:outline-none bg-white font-bold text-xs"
+                              value={dueDate}
+                              onChange={(e) => setDueDate(e.target.value)}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex flex-col justify-end pb-1 pl-2">
+                            <span className="text-[10px] text-amber-800 font-bold block">AUTO DUE DATE:</span>
+                            <span className="font-black text-xs text-[#3C2A21]">
+                              {(() => {
+                                const d = new Date();
+                                if (creditType === 'WEEKLY') d.setDate(d.getDate() + 7);
+                                else if (creditType === 'FIFTEEN_DAYS') d.setDate(d.getDate() + 15);
+                                else if (creditType === 'MONTHLY') d.setDate(d.getDate() + 30);
+                                return d.toLocaleDateString();
+                              })()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="font-bold text-amber-800 block mb-1">Remarks / Notes</label>
+                        <input
+                          type="text"
+                          placeholder="E.g. Authorized by Manager..."
+                          className="w-full p-1.5 border border-amber-300 rounded-lg focus:outline-none bg-white text-xs"
+                          value={remarks}
+                          onChange={(e) => setRemarks(e.target.value)}
+                        />
+                      </div>
                     </div>
                   )}
 

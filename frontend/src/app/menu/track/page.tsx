@@ -396,6 +396,21 @@ function TrackPageContent() {
           </div>
         </div>
       </div>
+
+      {/* Add More Items Button */}
+      {!isTerminal && (
+        <div className="mx-4 mt-6">
+          <Button
+            onClick={() => {
+              const lastToken = localStorage.getItem('ccb_last_token') || '';
+              router.push(`/menu?table=${order.tableId}&token=${lastToken}`);
+            }}
+            className="w-full bg-[#5C3A21] hover:bg-[#A0522D] text-white font-extrabold py-3 rounded-full flex items-center justify-center gap-2 shadow-lg"
+          >
+            <span>+ Add More Items</span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
