@@ -258,21 +258,35 @@ function MenuPageContent() {
         // Load Persistent Cart scoped to Table ID from Backend (fallback to LocalStorage)
         try {
           const cartRes = await axios.get(`${API_URL}/public/orders/cart/${tableId}`);
-          if (cartRes.data && cartRes.data.items) {
+          if (cartRes.data && cartRes.data.items && cartRes.data.items.length > 0) {
             const backendCart: { [key: string]: CartItem } = {};
             cartRes.data.items.forEach((item: any) => {
-              const addonIdsStr = item.selectedAddons.map((a: any) => a.id).sort().join('-');
+              const addonsList = item.selectedAddons || [];
+              const addonIdsStr = addonsList.map((a: any) => a.id).sort().join('-');
               const cartKey = `${item.menuItem.id}_${item.selectedVariant?.id || 'base'}_${addonIdsStr}`;
               backendCart[cartKey] = {
                 menuItem: item.menuItem,
-                selectedVariant: item.selectedVariant,
-                selectedAddons: item.selectedAddons,
+                selectedVariant: item.selectedVariant || null,
+                selectedAddons: addonsList,
                 quantity: item.quantity,
                 notes: item.notes || '',
               };
             });
             setCart(backendCart);
             localStorage.setItem(`ccb_cart_${tableId}`, JSON.stringify(backendCart));
+          } else {
+            const storedCart = localStorage.getItem(`ccb_cart_${tableId}`);
+            if (storedCart) {
+              try {
+                const parsed = JSON.parse(storedCart);
+                if (Object.keys(parsed).length > 0) {
+                  setCart(parsed);
+                  saveCart(parsed);
+                }
+              } catch {
+                // ignore
+              }
+            }
           }
         } catch {
           const storedCart = localStorage.getItem(`ccb_cart_${tableId}`);
@@ -658,25 +672,36 @@ function MenuPageContent() {
           </div>
         </div>
 
-        {settings?.enableCallWaiter && (
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={handleCallWaiter}
-            disabled={waiterCallLoading || waiterCallCooldown > 0}
-            className="bg-[#A0522D] hover:bg-[#5C3A21] text-white font-semibold rounded-full shadow-sm text-xs px-3 h-8 flex items-center gap-1.5"
+            onClick={() => setCartModalOpen(true)}
+            className="bg-[#5C3A21] hover:bg-[#A0522D] text-white font-bold rounded-full shadow-sm text-xs px-3 h-8 flex items-center gap-1.5 relative"
           >
-            {waiterCallLoading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : waiterCallCooldown > 0 ? (
-              <span>Waiter ({waiterCallCooldown}s)</span>
-            ) : (
-              <>
-                <Flame className="w-3.5 h-3.5 fill-amber-300 animate-pulse text-amber-300" />
-                <span>Call Waiter</span>
-              </>
-            )}
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Cart ({Object.values(cart).reduce((acc, ci) => acc + ci.quantity, 0)})</span>
           </Button>
-        )}
+
+          {settings?.enableCallWaiter && (
+            <Button
+              size="sm"
+              onClick={handleCallWaiter}
+              disabled={waiterCallLoading || waiterCallCooldown > 0}
+              className="bg-[#A0522D] hover:bg-[#5C3A21] text-white font-semibold rounded-full shadow-sm text-xs px-3 h-8 flex items-center gap-1.5"
+            >
+              {waiterCallLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : waiterCallCooldown > 0 ? (
+                <span>Waiter ({waiterCallCooldown}s)</span>
+              ) : (
+                <>
+                  <Flame className="w-3.5 h-3.5 fill-amber-300 animate-pulse text-amber-300" />
+                  <span>Call Waiter</span>
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </header>
 
       {/* Alert message for Waiter calls */}
@@ -1029,7 +1054,7 @@ function MenuPageContent() {
             }}
             className="bg-[#5C3A21] hover:bg-[#A0522D] text-white font-bold px-5 py-2 rounded-full flex items-center gap-1.5 shadow-lg"
           >
-            <span>View Cart</span>
+            <span>🛒 Cart ({Object.values(cart).reduce((acc, ci) => acc + ci.quantity, 0)})</span>
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
