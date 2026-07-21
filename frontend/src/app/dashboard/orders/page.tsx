@@ -499,6 +499,78 @@ export default function OrdersPage() {
     }
   };
 
+  // Compute modalData for single or combined grouped orders
+  const modalData = (() => {
+    if (!selectedOrder) return null;
+    if (!selectedGroupOrders || selectedGroupOrders.length <= 1) {
+      return {
+        title: `Order Details: ${selectedOrder.orderNumber}`,
+        description: `Placed on ${new Date(selectedOrder.createdAt).toLocaleString()}`,
+        source: selectedOrder.source,
+        tableNumber: selectedOrder.tableNumberSnapshot || 'POS',
+        customerName: selectedOrder.customer?.name || 'Walk-in',
+        customerPhone: selectedOrder.customer?.phone || null,
+        items: selectedOrder.items || [],
+        subtotal: Number(selectedOrder.subtotal || 0).toFixed(2),
+        cgst: Number(selectedOrder.cgst || 0).toFixed(2),
+        sgst: Number(selectedOrder.sgst || 0).toFixed(2),
+        serviceCharge: Number(selectedOrder.serviceCharge || 0).toFixed(2),
+        nightCharge: Number(selectedOrder.nightCharge || 0).toFixed(2),
+        roundOff: Number(selectedOrder.roundOff || 0).toFixed(2),
+        grandTotal: Number(selectedOrder.grandTotal || 0).toFixed(2),
+        statusHistory: selectedOrder.statusHistory || [],
+        orderNumbersText: selectedOrder.orderNumber,
+        isGrouped: false,
+      };
+    }
+
+    const allItems: OrderItem[] = [];
+    let totalSubtotal = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalServiceCharge = 0;
+    let totalNightCharge = 0;
+    let totalRoundOff = 0;
+    let totalGrandTotal = 0;
+    const orderNums: string[] = [];
+
+    for (const ord of selectedGroupOrders) {
+      orderNums.push(ord.orderNumber);
+      if (ord.items) {
+        allItems.push(...ord.items);
+      }
+      totalSubtotal += Number(ord.subtotal || 0);
+      totalCgst += Number(ord.cgst || 0);
+      totalSgst += Number(ord.sgst || 0);
+      totalServiceCharge += Number(ord.serviceCharge || 0);
+      totalNightCharge += Number(ord.nightCharge || 0);
+      totalRoundOff += Number(ord.roundOff || 0);
+      totalGrandTotal += Number(ord.grandTotal || 0);
+    }
+
+    const first = selectedGroupOrders[0];
+
+    return {
+      title: `Grouped Table Orders: ${first.tableNumberSnapshot || 'Table'} (${selectedGroupOrders.length} Orders)`,
+      description: `Combined session orders for ${first.tableNumberSnapshot || 'Table'}`,
+      source: selectedGroupOrders.map((o) => o.source).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+      tableNumber: first.tableNumberSnapshot || 'POS',
+      customerName: first.customer?.name || 'Walk-in',
+      customerPhone: first.customer?.phone || null,
+      items: allItems,
+      subtotal: totalSubtotal.toFixed(2),
+      cgst: totalCgst.toFixed(2),
+      sgst: totalSgst.toFixed(2),
+      serviceCharge: totalServiceCharge.toFixed(2),
+      nightCharge: totalNightCharge.toFixed(2),
+      roundOff: totalRoundOff.toFixed(2),
+      grandTotal: totalGrandTotal.toFixed(2),
+      statusHistory: first.statusHistory || [],
+      orderNumbersText: orderNums.join(', '),
+      isGrouped: true,
+    };
+  })();
+
   return (
     <div className="space-y-6 text-[#5C3A21]">
       {/* Top action/tabs bar */}
@@ -923,12 +995,16 @@ export default function OrdersPage() {
       )}
 
       {/* Complete Order Details CustomModal */}
-      {selectedOrder && (
+      {modalData && (
         <CustomModal
           isOpen={detailModalOpen}
-          onClose={() => setDetailModalOpen(false)}
-          title={`Order Details: ${selectedOrder.orderNumber}`}
-          description={`Placed on ${new Date(selectedOrder.createdAt).toLocaleString()}`}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setSelectedOrder(null);
+            setSelectedGroupOrders(null);
+          }}
+          title={modalData.title}
+          description={modalData.description}
         >
           <div className="p-5 max-h-[500px] overflow-y-auto space-y-5 text-xs text-[#5C3A21] no-scrollbar">
             {errorAlert && (
@@ -941,18 +1017,24 @@ export default function OrdersPage() {
             <div className="grid grid-cols-2 gap-4 bg-white border border-stone-200/80 p-3.5 rounded-xl">
               <div>
                 <p className="text-stone-400 font-bold uppercase text-[9px] tracking-wider">Source</p>
-                <p className="font-extrabold text-stone-800 text-xs mt-0.5">{selectedOrder.source}</p>
+                <p className="font-extrabold text-stone-800 text-xs mt-0.5">{modalData.source}</p>
               </div>
               <div>
                 <p className="text-stone-400 font-bold uppercase text-[9px] tracking-wider">Table</p>
-                <p className="font-extrabold text-stone-800 text-xs mt-0.5">{selectedOrder.tableNumberSnapshot || 'POS'}</p>
+                <p className="font-extrabold text-stone-800 text-xs mt-0.5">{modalData.tableNumber}</p>
               </div>
+              {modalData.isGrouped && (
+                <div className="col-span-2 border-t border-stone-100 pt-2">
+                  <p className="text-stone-400 font-bold uppercase text-[9px] tracking-wider">Orders in Group</p>
+                  <p className="font-extrabold text-amber-900 text-xs mt-0.5">{modalData.orderNumbersText}</p>
+                </div>
+              )}
               <div className="col-span-2 border-t border-stone-100 pt-2.5">
                 <p className="text-stone-400 font-bold uppercase text-[9px] tracking-wider">Customer Contact</p>
                 <div className="flex gap-2 text-stone-800 font-bold mt-1">
-                  <span className="flex items-center gap-1"><User className="w-3.5 h-3.5 text-stone-400" /> {selectedOrder.customer?.name || 'Walk-in'}</span>
-                  {selectedOrder.customer?.phone && (
-                    <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-stone-400" /> {selectedOrder.customer.phone}</span>
+                  <span className="flex items-center gap-1"><User className="w-3.5 h-3.5 text-stone-400" /> {modalData.customerName}</span>
+                  {modalData.customerPhone && (
+                    <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-stone-400" /> {modalData.customerPhone}</span>
                   )}
                 </div>
               </div>
@@ -960,16 +1042,16 @@ export default function OrdersPage() {
 
             {/* Items Snapshots */}
             <div className="space-y-2">
-              <h4 className="font-black text-xs uppercase tracking-wider text-[#A0522D]">Itemized Order items</h4>
+              <h4 className="font-black text-xs uppercase tracking-wider text-[#A0522D]">Itemized Order Items ({modalData.items.length} items)</h4>
               <div className="divide-y divide-stone-100 bg-white border border-stone-200/80 rounded-xl p-3.5 space-y-2">
-                {selectedOrder.items.map((item) => (
-                  <div key={item.id} className="py-2.5 flex justify-between gap-3 font-medium">
+                {modalData.items.map((item, idx) => (
+                  <div key={(item.id || 'item') + '_' + idx} className="py-2.5 flex justify-between gap-3 font-medium">
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-stone-800 truncate">{item.nameSnapshot}</p>
                       {item.variantNameSnapshot && (
                         <p className="text-stone-400 text-[10px] font-black mt-0.5">Size: {item.variantNameSnapshot}</p>
                       )}
-                      {item.addons.length > 0 && (
+                      {item.addons && item.addons.length > 0 && (
                         <p className="text-[#A0522D] text-[10px] font-bold mt-0.5">
                           Addons: {item.addons.map((a) => a.nameSnapshot).join(', ')}
                         </p>
@@ -993,49 +1075,49 @@ export default function OrdersPage() {
               <div className="bg-stone-50 border border-stone-200 p-3.5 rounded-xl space-y-2 font-semibold text-stone-500">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span className="text-stone-800">₹{selectedOrder.subtotal}</span>
+                  <span className="text-stone-800">₹{modalData.subtotal}</span>
                 </div>
-                {Number(selectedOrder.cgst) > 0 && (
+                {Number(modalData.cgst) > 0 && (
                   <>
                     <div className="flex justify-between">
                       <span>CGST</span>
-                      <span className="text-stone-800">₹{selectedOrder.cgst}</span>
+                      <span className="text-stone-800">₹{modalData.cgst}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>SGST</span>
-                      <span className="text-stone-800">₹{selectedOrder.sgst}</span>
+                      <span className="text-stone-800">₹{modalData.sgst}</span>
                     </div>
                   </>
                 )}
-                {Number(selectedOrder.serviceCharge) > 0 && (
+                {Number(modalData.serviceCharge) > 0 && (
                   <div className="flex justify-between">
                     <span>Service Charge</span>
-                    <span className="text-stone-800">₹{selectedOrder.serviceCharge}</span>
+                    <span className="text-stone-800">₹{modalData.serviceCharge}</span>
                   </div>
                 )}
-                {Number(selectedOrder.nightCharge) > 0 && (
+                {Number(modalData.nightCharge) > 0 && (
                   <div className="flex justify-between">
                     <span>Night Surcharge</span>
-                    <span className="text-stone-800">₹{selectedOrder.nightCharge}</span>
+                    <span className="text-stone-800">₹{modalData.nightCharge}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span>Round Off</span>
-                  <span className="text-stone-800">₹{selectedOrder.roundOff}</span>
+                  <span className="text-stone-800">₹{modalData.roundOff}</span>
                 </div>
                 <div className="flex justify-between text-sm font-black border-t border-stone-200/70 pt-2 text-[#5C3A21]">
                   <span>Grand Total</span>
-                  <span className="text-[#A0522D]">₹{selectedOrder.grandTotal}</span>
+                  <span className="text-[#A0522D]">₹{modalData.grandTotal}</span>
                 </div>
               </div>
             </div>
 
             {/* Order Timeline History */}
-            {selectedOrder.statusHistory && selectedOrder.statusHistory.length > 0 && (
+            {modalData.statusHistory && modalData.statusHistory.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-black text-xs uppercase tracking-wider text-[#A0522D]">Status Log Timeline</h4>
                 <div className="bg-white border border-stone-200/80 p-3.5 rounded-xl space-y-3.5">
-                  {selectedOrder.statusHistory.map((history) => (
+                  {modalData.statusHistory.map((history) => (
                     <div key={history.id} className="relative pl-4 border-l-2 border-stone-200 flex justify-between items-start text-[11px] font-medium text-stone-500">
                       <div className="absolute -left-[6px] top-1.5 w-2.5 h-2.5 rounded-full bg-[#8F6A50]" />
                       <div>
@@ -1055,7 +1137,7 @@ export default function OrdersPage() {
             )}
 
             {/* Staff status transition controls */}
-            {canModifyStatus && !['COMPLETED', 'CANCELLED', 'VOIDED'].includes(selectedOrder.status) && (
+            {canModifyStatus && selectedOrder && !['COMPLETED', 'CANCELLED', 'VOIDED'].includes(selectedOrder.status) && (
               <div className="space-y-3.5 border-t border-stone-200 pt-4">
                 <h4 className="font-black text-xs uppercase tracking-wider text-[#A0522D]">Transition Order Status</h4>
 
