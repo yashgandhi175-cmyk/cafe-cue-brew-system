@@ -403,7 +403,7 @@ function TrackPageContent() {
           <Button
             onClick={() => {
               const lastToken = localStorage.getItem('ccb_last_token') || '';
-              router.push(`/menu?table=${order.tableId}&token=${lastToken}`);
+              router.push(`/menu.html?table=${order.tableId}&token=${lastToken}`);
             }}
             className="w-full bg-[#5C3A21] hover:bg-[#A0522D] text-white font-extrabold py-3 rounded-full flex items-center justify-center gap-2 shadow-lg"
           >

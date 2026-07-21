@@ -297,17 +297,7 @@ export default function SettlementsPage() {
       }
 
       const data = await res.json();
-      // Parse list to fetch complete bill details too
-      const parsedOrders: Order[] = [];
-      for (const ord of data.data || []) {
-        // Fetch full order by ID to include bills and payments relation snapshots
-        const fullRes = await fetch(`${API_URL}/orders/${ord.id}`, { headers });
-        if (fullRes.ok) {
-          parsedOrders.push(await fullRes.json());
-        }
-      }
-
-      setOrders(parsedOrders);
+      setOrders(data.data || []);
       setLoading(false);
     } catch {
       setErrorMsg('Failed to load active orders list.');

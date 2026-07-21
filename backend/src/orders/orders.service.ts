@@ -608,19 +608,55 @@ export class OrdersService {
       }
     }
 
-    const [total, data] = await Promise.all([
+    const [total, rawData] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.findMany({
         where,
         include: {
           table: true,
           customer: true,
+          items: {
+            include: { addons: true },
+          },
+          bills: true,
+          payments: true,
         },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
     ]);
+
+    // Merge session orders for list output to avoid frontend N+1
+    const data = [];
+    for (const order of rawData) {
+      if (order.tableSessionId) {
+        const sessionOrders = await this.prisma.order.findMany({
+          where: {
+            tableSessionId: order.tableSessionId,
+            status: { notIn: ['CANCELLED', 'VOIDED'] },
+          },
+          include: {
+            items: {
+              include: { addons: true },
+            },
+            payments: {
+              include: { splitPayments: true },
+            },
+          },
+        });
+
+        const mergedItems = [];
+        const mergedPayments = [];
+        for (const so of sessionOrders) {
+          mergedItems.push(...so.items);
+          mergedPayments.push(...so.payments);
+        }
+        (order as any).items = mergedItems;
+        (order as any).payments = mergedPayments;
+      }
+      data.push(order);
+    }
 
     return {
       data,
@@ -808,7 +844,7 @@ export class OrdersService {
       }
 
       if (newStatus === OrderStatus.COMPLETED) {
-        if (order.paymentStatus !== PaymentStatus.PAID) {
+        if (order.paymentStatus !== PaymentStatus.PAID && order.paymentStatus !== PaymentStatus.CREDIT) {
           if (!override || role !== Role.OWNER) {
             throw new BadRequestException(
               'Cannot complete an order that is not fully paid. Requires owner override with a reason.',

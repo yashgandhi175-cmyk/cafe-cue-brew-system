@@ -602,7 +602,7 @@ function MenuPageContent() {
 
       setCheckoutOpen(false);
 
-      router.push(`/menu/track?token=${res.data.publicTrackingToken}`);
+      router.push(`/menu/track.html?token=${res.data.publicTrackingToken}`);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } };
       setCheckoutError(axiosError.response?.data?.message || 'Failed to submit order. Please try again.');
