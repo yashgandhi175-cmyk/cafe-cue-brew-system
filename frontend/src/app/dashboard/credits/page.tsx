@@ -40,7 +40,7 @@ interface CreditInvoice {
   billAmount: number;
   paidAmount: number;
   outstandingAmount: number;
-  dueDate: string;
+  dueDate: string | null;
   creditType: string;
   settlementStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
   notes: string | null;
@@ -571,7 +571,7 @@ export default function CreditLedgerPage() {
                               </td>
                               <td className="py-2.5 px-4 text-center font-mono">
                                 <span className={inv.overdue ? 'text-red-600' : 'text-gray-500'}>
-                                  {new Date(inv.dueDate).toLocaleDateString()}
+                                  {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Until Pay'}
                                 </span>
                               </td>
                               <td className="py-2.5 px-4 text-right">₹{inv.billAmount}</td>

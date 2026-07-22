@@ -11,7 +11,6 @@ import { TablesService } from './tables.service';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 
 @Controller('public/tables')
-@UseGuards(ThrottlerGuard)
 export class PublicTablesController {
   constructor(private readonly tablesService: TablesService) {}
 

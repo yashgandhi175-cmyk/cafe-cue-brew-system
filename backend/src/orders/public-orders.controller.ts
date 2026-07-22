@@ -4,12 +4,11 @@ import { CreatePublicOrderDto } from './dto/create-public-order.dto';
 import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 
 @Controller('public/orders')
-@UseGuards(ThrottlerGuard)
 export class PublicOrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // limit to max 3 orders per minute per IP
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // allow up to 30 public ordering calls per minute per IP
   createPublicOrder(@Body() createPublicOrderDto: CreatePublicOrderDto) {
     return this.ordersService.createPublicOrder(createPublicOrderDto);
   }

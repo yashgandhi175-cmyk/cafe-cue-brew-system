@@ -32,7 +32,7 @@ export class PaymentsService {
       amountTendered?: number;
       reference?: string;
       paymentIdempotencyKey?: string;
-      creditType?: 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM';
+      creditType?: 'UNTIL_PAY' | 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM';
       dueDate?: string;
       notes?: string;
     },
@@ -210,16 +210,22 @@ export class PaymentsService {
             );
           }
 
-          let calculatedDueDate = new Date();
-          const creditType = dto.creditType || 'CUSTOM';
+          let calculatedDueDate: Date | null = null;
+          const creditType = dto.creditType || 'UNTIL_PAY';
           if (creditType === 'WEEKLY') {
+            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 7);
           } else if (creditType === 'FIFTEEN_DAYS') {
+            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 15);
           } else if (creditType === 'MONTHLY') {
+            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
+          } else if (creditType === 'CUSTOM') {
+            calculatedDueDate = dto.dueDate ? new Date(dto.dueDate) : null;
           } else {
-            calculatedDueDate = dto.dueDate ? new Date(dto.dueDate) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+            // UNTIL_PAY: No fixed due date required
+            calculatedDueDate = null;
           }
 
           const targetInvoiceNumber = bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`;

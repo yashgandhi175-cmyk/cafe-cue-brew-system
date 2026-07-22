@@ -41,7 +41,7 @@ export class CreditsService {
 
         let maxOverdueDays = 0;
         activeLedgers.forEach((ledger) => {
-          if (ledger.dueDate < now) {
+          if (ledger.dueDate && ledger.dueDate < now) {
             const diffTime = Math.abs(now.getTime() - ledger.dueDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             if (diffDays > maxOverdueDays) {
@@ -134,7 +134,7 @@ export class CreditsService {
         creditType: l.creditType,
         settlementStatus: l.settlementStatus,
         notes: l.notes,
-        overdue: new Date() > l.dueDate && l.settlementStatus !== 'PAID',
+        overdue: l.dueDate ? new Date() > new Date(l.dueDate) && l.settlementStatus !== 'PAID' : false,
       };
     });
 
@@ -303,7 +303,7 @@ export class CreditsService {
     );
 
     // Overdue Customers Count
-    const overdueLedgers = activeLedgers.filter((l) => l.dueDate < now);
+    const overdueLedgers = activeLedgers.filter((l) => l.dueDate && l.dueDate < now);
     const overdueCustomersSet = new Set(overdueLedgers.map((l) => l.customerId));
     const overdueCustomers = overdueCustomersSet.size;
 

@@ -1285,8 +1285,8 @@ model CreditLedger {
   billAmount        Decimal          @db.Decimal(10, 2)
   outstandingAmount Decimal          @db.Decimal(10, 2)
   creditDate        DateTime         @default(now())
-  dueDate           DateTime
-  creditType        CreditType       @default(CUSTOM)
+  dueDate           DateTime?
+  creditType        CreditType       @default(UNTIL_PAY)
   notes             String?          @db.Text
   settlementStatus  SettlementStatus @default(UNPAID)
   createdById       String?
@@ -1300,6 +1300,7 @@ model CreditLedger {
 }
 
 enum CreditType {
+  UNTIL_PAY
   WEEKLY
   FIFTEEN_DAYS
   MONTHLY
