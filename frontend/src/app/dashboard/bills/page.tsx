@@ -2,7 +2,7 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { jsPDF } from 'jspdf';
 import {
@@ -137,27 +137,132 @@ export default function SettlementsPage() {
     }
   }, [paymentFilter]);
 
+  // Filter & Group orders by tableSessionId for active table sessions on Settlements page
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const matchesSearch =
+        o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.customer?.phone.includes(searchQuery);
+
+      const matchesFilter =
+        paymentFilter === 'ALL' || o.paymentStatus === paymentFilter;
+
+      return matchesSearch && matchesFilter && o.status !== 'CANCELLED' && o.status !== 'VOIDED';
+    });
+  }, [orders, searchQuery, paymentFilter]);
+
+  const groupedOrders = useMemo(() => {
+    const sessionMap = new Map<string, {
+      id: string;
+      primaryOrderId: string;
+      orderNumber: string;
+      tableSessionId: string | null;
+      tableNumberSnapshot: string;
+      customer?: { name: string; phone: string };
+      orders: Order[];
+      items: OrderItem[];
+      subtotal: number;
+      cgst: number;
+      sgst: number;
+      serviceCharge: number;
+      nightCharge: number;
+      roundOff: number;
+      grandTotal: number;
+      paymentStatus: string;
+      status: string;
+      createdAt: string;
+      bills: Bill[];
+      payments: Payment[];
+    }>();
+
+    const standalone: Order[] = [];
+
+    for (const o of filteredOrders) {
+      if (o.tableSessionId) {
+        if (!sessionMap.has(o.tableSessionId)) {
+          sessionMap.set(o.tableSessionId, {
+            id: `session_${o.tableSessionId}`,
+            primaryOrderId: o.id,
+            orderNumber: `Table ${o.tableNumberSnapshot || 'Session'}`,
+            tableSessionId: o.tableSessionId,
+            tableNumberSnapshot: o.tableNumberSnapshot || 'Table',
+            customer: o.customer,
+            orders: [],
+            items: [],
+            subtotal: 0,
+            cgst: 0,
+            sgst: 0,
+            serviceCharge: 0,
+            nightCharge: 0,
+            roundOff: 0,
+            grandTotal: 0,
+            paymentStatus: 'UNPAID',
+            status: o.status,
+            createdAt: o.createdAt,
+            bills: [],
+            payments: [],
+          });
+        }
+
+        const group = sessionMap.get(o.tableSessionId)!;
+        group.orders.push(o);
+        group.items.push(...(o.items || []));
+        group.subtotal += Number(o.subtotal || 0);
+        group.cgst += Number(o.cgst || 0);
+        group.sgst += Number(o.sgst || 0);
+        group.serviceCharge += Number(o.serviceCharge || 0);
+        group.nightCharge += Number(o.nightCharge || 0);
+        group.roundOff += Number(o.roundOff || 0);
+        group.grandTotal += Number(o.grandTotal || 0);
+
+        if (o.bills) group.bills.push(...o.bills);
+        if (o.payments) group.payments.push(...o.payments);
+      } else {
+        standalone.push(o);
+      }
+    }
+
+    const sessionCards = Array.from(sessionMap.values()).map((g) => {
+      const allPaid = g.orders.every((o) => o.paymentStatus === 'PAID');
+      const anyPartial = g.orders.some((o) => o.paymentStatus === 'PARTIALLY_PAID' || o.paymentStatus === 'PAID');
+      g.paymentStatus = allPaid ? 'PAID' : anyPartial ? 'PARTIALLY_PAID' : 'UNPAID';
+
+      const numOrders = g.orders.length;
+      g.orderNumber = numOrders > 1 ? `Table ${g.tableNumberSnapshot} (${numOrders} Orders)` : g.orders[0].orderNumber;
+      return g as unknown as Order;
+    });
+
+    return [...sessionCards, ...standalone];
+  }, [filteredOrders]);
+
   useEffect(() => {
     if (selectedOrderId) {
-      const ord = orders.find((o) => o.id === selectedOrderId);
+      const ord = groupedOrders.find((o) => o.id === selectedOrderId);
       if (ord) {
         setSelectedOrder(ord);
         // Default payAmount to outstanding
-        const settled = ord.payments
+        const settled = (ord.payments || [])
           .filter((p) => p.isSettled)
           .reduce((sum, p) => sum + Number(p.amount), 0);
         const outstanding = Math.max(0, Number(ord.grandTotal) - settled);
         setPayAmount(outstanding);
         setCashTendered(outstanding);
-        
+
         fetchLoyaltyInfoForOrder(ord).catch(() => {});
+      }
+    } else if (groupedOrders.length > 0) {
+      // Auto-select first unpaid order on page load
+      const firstUnpaid = groupedOrders.find((o) => o.paymentStatus !== 'PAID') || groupedOrders[0];
+      if (firstUnpaid) {
+        setSelectedOrderId(firstUnpaid.id);
       }
     } else {
       setSelectedOrder(null);
       setLoyaltyProfile(null);
       setRedemptionRequests([]);
     }
-  }, [selectedOrderId, orders]);
+  }, [selectedOrderId, groupedOrders]);
 
   const fetchLoyaltyInfoForOrder = async (order: Order) => {
     const customerId = (order as any).customerId;
@@ -672,102 +777,7 @@ export default function SettlementsPage() {
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
-    const matchesSearch =
-      o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.customer?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.customer?.phone.includes(searchQuery);
 
-    const matchesFilter =
-      paymentFilter === 'ALL' || o.paymentStatus === paymentFilter;
-
-    return matchesSearch && matchesFilter && o.status !== 'CANCELLED' && o.status !== 'VOIDED';
-  });
-
-  // Group orders by tableSessionId for active table sessions on Settlements page
-  const groupedOrders = (() => {
-    const sessionMap = new Map<string, {
-      id: string;
-      primaryOrderId: string;
-      orderNumber: string;
-      tableSessionId: string | null;
-      tableNumberSnapshot: string;
-      customer?: { name: string; phone: string };
-      orders: Order[];
-      items: OrderItem[];
-      subtotal: number;
-      cgst: number;
-      sgst: number;
-      serviceCharge: number;
-      nightCharge: number;
-      roundOff: number;
-      grandTotal: number;
-      paymentStatus: string;
-      status: string;
-      createdAt: string;
-      bills: Bill[];
-      payments: Payment[];
-    }>();
-
-    const standalone: Order[] = [];
-
-    for (const o of filteredOrders) {
-      if (o.tableSessionId) {
-        if (!sessionMap.has(o.tableSessionId)) {
-          sessionMap.set(o.tableSessionId, {
-            id: `session_${o.tableSessionId}`,
-            primaryOrderId: o.id,
-            orderNumber: `Table ${o.tableNumberSnapshot || 'Session'}`,
-            tableSessionId: o.tableSessionId,
-            tableNumberSnapshot: o.tableNumberSnapshot || 'Table',
-            customer: o.customer,
-            orders: [],
-            items: [],
-            subtotal: 0,
-            cgst: 0,
-            sgst: 0,
-            serviceCharge: 0,
-            nightCharge: 0,
-            roundOff: 0,
-            grandTotal: 0,
-            paymentStatus: 'UNPAID',
-            status: o.status,
-            createdAt: o.createdAt,
-            bills: [],
-            payments: [],
-          });
-        }
-
-        const group = sessionMap.get(o.tableSessionId)!;
-        group.orders.push(o);
-        group.items.push(...(o.items || []));
-        group.subtotal += Number(o.subtotal || 0);
-        group.cgst += Number(o.cgst || 0);
-        group.sgst += Number(o.sgst || 0);
-        group.serviceCharge += Number(o.serviceCharge || 0);
-        group.nightCharge += Number(o.nightCharge || 0);
-        group.roundOff += Number(o.roundOff || 0);
-        group.grandTotal += Number(o.grandTotal || 0);
-
-        if (o.bills) group.bills.push(...o.bills);
-        if (o.payments) group.payments.push(...o.payments);
-      } else {
-        standalone.push(o);
-      }
-    }
-
-    const sessionCards = Array.from(sessionMap.values()).map((g) => {
-      const allPaid = g.orders.every((o) => o.paymentStatus === 'PAID');
-      const anyPartial = g.orders.some((o) => o.paymentStatus === 'PARTIALLY_PAID' || o.paymentStatus === 'PAID');
-      g.paymentStatus = allPaid ? 'PAID' : anyPartial ? 'PARTIALLY_PAID' : 'UNPAID';
-
-      const numOrders = g.orders.length;
-      g.orderNumber = numOrders > 1 ? `Table ${g.tableNumberSnapshot} (${numOrders} Orders)` : g.orders[0].orderNumber;
-      return g as unknown as Order;
-    });
-
-    return [...sessionCards, ...standalone];
-  })();
 
   if (loading) {
     return (
@@ -850,41 +860,52 @@ export default function SettlementsPage() {
               No orders matched selection.
             </div>
           ) : (
-            groupedOrders.map((o) => (
-              <div
-                key={o.id}
-                onClick={() => setSelectedOrderId(o.id)}
-                className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
-                  selectedOrderId === o.id
-                    ? 'border-[#8F6A50] bg-[#FAF8F5] shadow-sm'
-                    : 'border-[#EAD8C0]/40 bg-white hover:border-[#EAD8C0]'
-                }`}
-              >
-                <div>
-                  <h4 className="font-bold text-xs">{o.orderNumber}</h4>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    Table: {o.tableNumberSnapshot || 'Takeaway'} | {o.customer?.name || 'Walk-in'}
-                  </p>
-                  <p className="text-[10px] text-gray-400">
-                    Grand Total: ₹{Number(o.grandTotal).toFixed(2)}
-                  </p>
+            groupedOrders.map((o) => {
+              const activeInvoiceNo = o.bills?.find((b) => b.status === 'FINALIZED' || b.status === 'PAID')?.invoiceNumber;
+              const displayHeader = activeInvoiceNo || o.orderNumber;
+              
+              const rawTable = o.tableNumberSnapshot || '';
+              const displayTable = rawTable
+                ? (rawTable.toLowerCase().startsWith('table') ? rawTable : `Table ${rawTable}`)
+                : 'Takeaway';
+              const displayCustomer = o.customer?.name || 'Walk-in Customer';
+
+              return (
+                <div
+                  key={o.id}
+                  onClick={() => setSelectedOrderId(o.id)}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                    selectedOrderId === o.id
+                      ? 'border-[#8F6A50] bg-[#FAF8F5] shadow-md ring-1 ring-[#8F6A50]'
+                      : 'border-[#EAD8C0]/40 bg-white hover:border-[#EAD8C0]'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <h4 className="font-extrabold text-xs text-[#3C2A21]">{displayHeader}</h4>
+                    <p className="text-[10px] text-gray-500 font-medium">
+                      {displayTable} | {displayCustomer}
+                    </p>
+                    <p className="text-[11px] font-black text-[#8F6A50] mt-1">
+                      Grand Total: ₹{Number(o.grandTotal).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end justify-between self-stretch">
+                    <ChevronRight className="h-4 w-4 text-[#8F6A50]" />
+                    <span
+                      className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                        o.paymentStatus === 'PAID'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : o.paymentStatus === 'PARTIALLY_PAID'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-red-100 text-red-600'
+                      }`}
+                    >
+                      {o.paymentStatus}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end">
-                  <ChevronRight className="h-4 w-4 text-[#8F6A50]" />
-                  <span
-                    className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full mt-2 ${
-                      o.paymentStatus === 'PAID'
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : o.paymentStatus === 'PARTIALLY_PAID'
-                        ? 'bg-amber-50 text-amber-600'
-                        : 'bg-red-50 text-red-500'
-                    }`}
-                  >
-                    {o.paymentStatus}
-                  </span>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
