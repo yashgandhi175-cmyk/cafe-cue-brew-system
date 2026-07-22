@@ -3,7 +3,6 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { execSync } from 'child_process';
 
 process.on('uncaughtException', (err) => {
   console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
@@ -40,25 +39,6 @@ async function bootstrap() {
     }
   } else {
     console.warn('WARNING: DATABASE_URL environment variable is not defined!');
-  }
-
-  // Run database schema synchronization conditionally based on environment
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      console.log('Running database schema sync (prisma db push) in development mode...');
-      execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit' });
-      console.log('Development database schema sync completed.');
-    } catch (dbError) {
-      console.error('Error running development database schema sync:', dbError);
-    }
-  } else {
-    try {
-      console.log('Running production database migration (prisma migrate deploy)...');
-      execSync('npx prisma migrate deploy', { stdio: 'inherit' });
-      console.log('Production database migration completed.');
-    } catch (dbError) {
-      console.warn('Production database migration notice:', dbError);
-    }
   }
 
   const app = await NestFactory.create(AppModule);
