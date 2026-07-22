@@ -37,7 +37,7 @@ export class PublicTablesController {
   }
 
   @Post('call-waiter')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // limit to max 5 calls per minute per IP
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // allow up to 30 waiter calls per minute per IP
   async callWaiter(
     @Body('tableId') tableId: string,
     @Body('token') token: string,

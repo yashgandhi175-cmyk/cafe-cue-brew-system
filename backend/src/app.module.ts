@@ -45,7 +45,7 @@ import { join } from 'path';
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
-        limit: 120, // relaxed global limit to prevent normal HTTP polling from being blocked (120 reqs/min)
+        limit: 300, // global rate limit set to 300 reqs/min to accommodate polling and multi-tab QR ordering
       },
     ]),
     ServeStaticModule.forRootAsync({

@@ -224,10 +224,21 @@ export default function SettlementsPage() {
       }
     }
 
+    const calculateCardStatus = (grandTotal: number, payments: any[]) => {
+      const settled = (payments || [])
+        .filter((p: any) => p.isSettled)
+        .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+      const outstanding = Math.max(0, grandTotal - settled);
+      const hasCredit = (payments || []).some((p: any) => p.method === 'CREDIT');
+
+      if (outstanding === 0 && grandTotal > 0) return 'PAID';
+      if (settled > 0 && outstanding > 0) return 'PARTIAL';
+      if (hasCredit && outstanding > 0) return 'CREDIT';
+      return 'UNPAID';
+    };
+
     const sessionCards = Array.from(sessionMap.values()).map((g) => {
-      const allPaid = g.orders.every((o) => o.paymentStatus === 'PAID');
-      const anyPartial = g.orders.some((o) => o.paymentStatus === 'PARTIALLY_PAID' || o.paymentStatus === 'PAID');
-      g.paymentStatus = allPaid ? 'PAID' : anyPartial ? 'PARTIALLY_PAID' : 'UNPAID';
+      g.paymentStatus = calculateCardStatus(g.grandTotal, g.payments);
 
       const numOrders = g.orders.length;
       const cleanTable = g.tableNumberSnapshot
@@ -237,7 +248,13 @@ export default function SettlementsPage() {
       return g as unknown as Order;
     });
 
-    return [...sessionCards, ...standalone];
+    const standaloneCards = standalone.map((o) => {
+      const gTotal = Number(o.grandTotal || 0);
+      const computedStatus = calculateCardStatus(gTotal, o.payments || []);
+      return { ...o, paymentStatus: computedStatus };
+    });
+
+    return [...sessionCards, ...standaloneCards];
   }, [filteredOrders]);
 
   useEffect(() => {
@@ -865,8 +882,10 @@ export default function SettlementsPage() {
                       className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full ${
                         o.paymentStatus === 'PAID'
                           ? 'bg-emerald-100 text-emerald-700'
-                          : o.paymentStatus === 'PARTIALLY_PAID'
+                          : o.paymentStatus === 'PARTIAL' || o.paymentStatus === 'PARTIALLY_PAID'
                           ? 'bg-amber-100 text-amber-700'
+                          : o.paymentStatus === 'CREDIT'
+                          ? 'bg-purple-100 text-purple-700'
                           : 'bg-red-100 text-red-600'
                       }`}
                     >

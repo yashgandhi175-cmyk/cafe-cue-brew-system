@@ -301,14 +301,19 @@ export class PaymentsService {
         let finalPaymentStatus: PaymentStatus = PaymentStatus.UNPAID;
         let finalBillStatus: BillStatus = BillStatus.FINALIZED;
 
-        if (finalSettledSum >= grandTotal) {
+        const outstandingVal = Math.max(0, this.calcService.roundToTwo(grandTotal - finalSettledSum));
+
+        if (outstandingVal === 0 && grandTotal > 0) {
           finalPaymentStatus = PaymentStatus.PAID;
           finalBillStatus = BillStatus.PAID;
-        } else if (hasCreditPayment) {
+        } else if (finalSettledSum > 0 && outstandingVal > 0) {
+          finalPaymentStatus = PaymentStatus.PARTIAL;
+          finalBillStatus = BillStatus.FINALIZED;
+        } else if (hasCreditPayment && outstandingVal > 0) {
           finalPaymentStatus = PaymentStatus.CREDIT;
           finalBillStatus = BillStatus.FINALIZED;
-        } else if (finalSettledSum > 0) {
-          finalPaymentStatus = PaymentStatus.PARTIAL;
+        } else {
+          finalPaymentStatus = PaymentStatus.UNPAID;
           finalBillStatus = BillStatus.FINALIZED;
         }
 
