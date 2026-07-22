@@ -608,7 +608,7 @@ export class OrdersService {
       }
     }
 
-    const [total, rawData] = await Promise.all([
+    const [total, data] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.findMany({
         where,
@@ -626,37 +626,6 @@ export class OrdersService {
         take: limit,
       }),
     ]);
-
-    // Merge session orders for list output to avoid frontend N+1
-    const data = [];
-    for (const order of rawData) {
-      if (order.tableSessionId) {
-        const sessionOrders = await this.prisma.order.findMany({
-          where: {
-            tableSessionId: order.tableSessionId,
-            status: { notIn: ['CANCELLED', 'VOIDED'] },
-          },
-          include: {
-            items: {
-              include: { addons: true },
-            },
-            payments: {
-              include: { splitPayments: true },
-            },
-          },
-        });
-
-        const mergedItems = [];
-        const mergedPayments = [];
-        for (const so of sessionOrders) {
-          mergedItems.push(...so.items);
-          mergedPayments.push(...so.payments);
-        }
-        (order as any).items = mergedItems;
-        (order as any).payments = mergedPayments;
-      }
-      data.push(order);
-    }
 
     return {
       data,
@@ -696,60 +665,6 @@ export class OrdersService {
 
     if (!order) {
       throw new NotFoundException('Order not found');
-    }
-
-    if (order.tableSessionId) {
-      const sessionOrders = await this.prisma.order.findMany({
-        where: {
-          tableSessionId: order.tableSessionId,
-          status: { notIn: ['CANCELLED', 'VOIDED'] },
-        },
-        include: {
-          items: {
-            include: { addons: true },
-          },
-          payments: {
-            include: { splitPayments: true },
-          },
-        },
-      });
-
-      // Merge all items from all non-cancelled orders in the session
-      const mergedItems = [];
-      const mergedPayments = [];
-      for (const so of sessionOrders) {
-        mergedItems.push(...so.items);
-        mergedPayments.push(...so.payments);
-      }
-      (order as any).items = mergedItems;
-      (order as any).payments = mergedPayments;
-
-      // Find the active bill for the session
-      const activeBill = order.bills.find(b => b.status === 'DRAFT')
-        || await this.prisma.bill.findFirst({
-            where: { tableSessionId: order.tableSessionId, status: 'DRAFT' },
-          })
-        || await this.prisma.bill.findFirst({
-            where: { tableSessionId: order.tableSessionId },
-            orderBy: { createdAt: 'desc' },
-          });
-
-      if (activeBill) {
-        order.subtotal = activeBill.subtotal;
-        order.discount = activeBill.discount;
-        order.couponDiscount = activeBill.couponDiscount;
-        order.taxableAmount = activeBill.taxableAmount;
-        order.cgst = activeBill.cgst;
-        order.sgst = activeBill.sgst;
-        order.serviceCharge = activeBill.serviceCharge;
-        order.nightCharge = activeBill.nightCharge;
-        order.roundOff = activeBill.roundOff;
-        order.grandTotal = activeBill.grandTotal;
-        // Make sure order.bills includes this active bill
-        if (!order.bills.some(b => b.id === activeBill.id)) {
-          order.bills.push(activeBill);
-        }
-      }
     }
 
     return order;
