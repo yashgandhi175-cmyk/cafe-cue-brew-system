@@ -56,9 +56,25 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin:
-      configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin) return callback(null, true);
+      const frontendUrl = configService.get<string>('FRONTEND_URL');
+      const allowed = [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'https://cafecuebrew.com',
+        'https://www.cafecuebrew.com',
+        frontendUrl,
+      ].filter(Boolean);
+
+      if (allowed.some((a) => a && (origin === a || origin.startsWith('https://cafecuebrew.com') || origin.endsWith('.cafecuebrew.com')))) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
   // Enable global validation pipe

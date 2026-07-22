@@ -293,11 +293,10 @@ export default function PosConsolePage() {
         addonIds: c.selectedAddons.map((a) => a.id),
         quantity: c.quantity,
       }));
-      const res = await fetch(`${API_URL}/public/coupons/validate`, {
+      const res = await fetchWithAuth(`${API_URL}/public/coupons/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           code: couponCode.trim().toUpperCase(),
@@ -331,7 +330,7 @@ export default function PosConsolePage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       // 1. Fetch public active coupons
-      const cRes = await fetch(`${API_URL}/public/coupons`, { headers });
+      const cRes = await fetchWithAuth(`${API_URL}/public/coupons`);
       const couponsList = await cRes.json();
 
       // 2. Validate each coupon against current cart in parallel
@@ -345,11 +344,10 @@ export default function PosConsolePage() {
       const validatedList = await Promise.all(
         couponsList.map(async (c: any) => {
           try {
-            const vRes = await fetch(`${API_URL}/public/coupons/validate`, {
+            const vRes = await fetchWithAuth(`${API_URL}/public/coupons/validate`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
               },
               body: JSON.stringify({
                 code: c.code,
@@ -442,11 +440,10 @@ export default function PosConsolePage() {
         idempotencyKey: 'POS_' + Date.now() + '_' + Math.random().toString(36).substring(7),
       };
 
-      const res = await fetch(`${API_URL}/orders/pos`, {
+      const res = await fetchWithAuth(`${API_URL}/orders/pos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });

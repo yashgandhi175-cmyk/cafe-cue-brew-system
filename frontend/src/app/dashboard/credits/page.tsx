@@ -136,9 +136,7 @@ export default function CreditLedgerPage() {
     setSettleError(null);
     setSettleSuccess(false);
     try {
-      const token = localStorage.getItem('ccb_token');
-      const headers = { Authorization: `Bearer ${token}` };
-      const res = await fetch(`${API_URL}/credits/customer/${customerId}`, { headers });
+      const res = await fetchWithAuth(`${API_URL}/credits/customer/${customerId}`);
       if (!res.ok) throw new Error('Failed to fetch customer credit details');
       const data = await res.json();
       setDetails(data);
@@ -193,12 +191,10 @@ export default function CreditLedgerPage() {
     setSettleSuccess(false);
 
     try {
-      const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/credits/payment`, {
+      const res = await fetchWithAuth(`${API_URL}/credits/payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ledgerId: selectedLedgerId,

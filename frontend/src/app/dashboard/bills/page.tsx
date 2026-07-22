@@ -270,10 +270,7 @@ export default function SettlementsPage() {
       return;
     }
     try {
-      const token = localStorage.getItem('ccb_token');
-      const headers = { Authorization: `Bearer ${token}` };
-      
-      const profileRes = await fetch(`${API_URL}/customers/${customerId}/loyalty`, { headers });
+      const profileRes = await fetchWithAuth(`${API_URL}/customers/${customerId}/loyalty`);
       if (profileRes.ok) {
         const profile = await profileRes.json();
         setLoyaltyProfile(profile);
@@ -281,7 +278,7 @@ export default function SettlementsPage() {
 
       const activeBill = order.bills.find((b) => b.status === 'DRAFT');
       if (activeBill) {
-        const requestsRes = await fetch(`${API_URL}/loyalty/redemption-requests?billId=${activeBill.id}`, { headers });
+        const requestsRes = await fetchWithAuth(`${API_URL}/loyalty/redemption-requests?billId=${activeBill.id}`);
         if (requestsRes.ok) {
           const requests = await requestsRes.json();
           setRedemptionRequests(requests);
@@ -305,12 +302,10 @@ export default function SettlementsPage() {
     }
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/loyalty/redemption-requests`, {
+      const res = await fetchWithAuth(`${API_URL}/loyalty/redemption-requests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           billId,
@@ -335,10 +330,8 @@ export default function SettlementsPage() {
   const handleApproveRedemption = async (requestId: string) => {
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/approve`, {
+      const res = await fetchWithAuth(`${API_URL}/loyalty/redemption-requests/${requestId}/approve`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to approve redemption.');
@@ -354,10 +347,8 @@ export default function SettlementsPage() {
   const handleRejectRedemption = async (requestId: string) => {
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/reject`, {
+      const res = await fetchWithAuth(`${API_URL}/loyalty/redemption-requests/${requestId}/reject`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to reject redemption.');
@@ -373,10 +364,8 @@ export default function SettlementsPage() {
   const handleCancelRedemption = async (requestId: string) => {
     try {
       setSubmitting(true);
-      const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/loyalty/redemption-requests/${requestId}/cancel`, {
+      const res = await fetchWithAuth(`${API_URL}/loyalty/redemption-requests/${requestId}/cancel`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to cancel redemption request.');
@@ -418,13 +407,11 @@ export default function SettlementsPage() {
     setSuccessMsg('');
 
     try {
-      const token = localStorage.getItem('ccb_token');
       const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
-      const res = await fetch(`${API_URL}/billing/orders/${targetId}/discount`, {
+      const res = await fetchWithAuth(`${API_URL}/billing/orders/${targetId}/discount`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           type: discountType,
@@ -458,13 +445,9 @@ export default function SettlementsPage() {
     setSuccessMsg('');
 
     try {
-      const token = localStorage.getItem('ccb_token');
       const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
-      const res = await fetch(`${API_URL}/billing/orders/${targetId}/finalize`, {
+      const res = await fetchWithAuth(`${API_URL}/billing/orders/${targetId}/finalize`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
 
       const data = await res.json();
@@ -494,15 +477,13 @@ export default function SettlementsPage() {
     setSuccessMsg('');
 
     try {
-      const token = localStorage.getItem('ccb_token');
       let currentBill = selectedOrder.bills.find((b) => b.status === 'FINALIZED' || b.status === 'PAID');
 
       if (!currentBill) {
         // Automatically finalize the bill for the order/session
         const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
-        const finRes = await fetch(`${API_URL}/billing/orders/${targetId}/finalize`, {
+        const finRes = await fetchWithAuth(`${API_URL}/billing/orders/${targetId}/finalize`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
         });
         const finData = await finRes.json();
         if (!finRes.ok) {
@@ -515,11 +496,10 @@ export default function SettlementsPage() {
         throw new Error('Unable to create or locate bill for payment.');
       }
 
-      const res = await fetch(`${API_URL}/payments`, {
+      const res = await fetchWithAuth(`${API_URL}/payments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           billId: currentBill.id,
@@ -558,18 +538,16 @@ export default function SettlementsPage() {
     setSuccessMsg('');
 
     try {
-      const token = localStorage.getItem('ccb_token');
       const payload: any = { status: 'COMPLETED' };
       if (useOwnerOverride) {
         payload.override = true;
         payload.overrideReason = ownerOverrideReason.trim();
       }
 
-      const res = await fetch(`${API_URL}/orders/${selectedOrder.id}/status`, {
+      const res = await fetchWithAuth(`${API_URL}/orders/${selectedOrder.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
