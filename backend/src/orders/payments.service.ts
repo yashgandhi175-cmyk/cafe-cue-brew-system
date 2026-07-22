@@ -202,7 +202,7 @@ export class PaymentsService {
           },
         });
 
-        // 7.5 If method is CREDIT, create a CreditLedger entry
+        // 7.5 If method is CREDIT, create or update a CreditLedger entry idempotently
         if (dto.method === PaymentMethod.CREDIT) {
           if (!bill.order.customerId) {
             throw new BadRequestException(
@@ -222,21 +222,39 @@ export class PaymentsService {
             calculatedDueDate = dto.dueDate ? new Date(dto.dueDate) : new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
           }
 
-          await tx.creditLedger.create({
-            data: {
-              customerId: bill.order.customerId,
-              invoiceNumber: bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`,
-              invoiceDate: bill.finalizedAt || new Date(),
-              billAmount: bill.grandTotal,
-              outstandingAmount: finalSettledAmount,
-              dueDate: calculatedDueDate,
-              creditType: creditType,
-              notes: dto.notes || null,
-              settlementStatus: 'UNPAID',
-              createdById: staffId,
-              updatedById: staffId,
-            },
+          const targetInvoiceNumber = bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`;
+
+          const existingLedger = await tx.creditLedger.findUnique({
+            where: { invoiceNumber: targetInvoiceNumber },
           });
+
+          if (existingLedger) {
+            await tx.creditLedger.update({
+              where: { id: existingLedger.id },
+              data: {
+                outstandingAmount: finalSettledAmount,
+                dueDate: calculatedDueDate,
+                notes: dto.notes || existingLedger.notes,
+                updatedById: staffId,
+              },
+            });
+          } else {
+            await tx.creditLedger.create({
+              data: {
+                customerId: bill.order.customerId,
+                invoiceNumber: targetInvoiceNumber,
+                invoiceDate: bill.finalizedAt || new Date(),
+                billAmount: bill.grandTotal,
+                outstandingAmount: finalSettledAmount,
+                dueDate: calculatedDueDate,
+                creditType: creditType,
+                notes: dto.notes || null,
+                settlementStatus: 'UNPAID',
+                createdById: staffId,
+                updatedById: staffId,
+              },
+            });
+          }
         } else {
           // If paying off an outstanding credit bill with Cash/UPI/Card, update any associated CreditLedger entries
           if (bill.order?.customerId) {
