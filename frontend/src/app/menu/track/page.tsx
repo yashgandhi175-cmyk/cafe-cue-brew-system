@@ -38,6 +38,13 @@ interface OrderItem {
 interface OrderDetails {
   id: string;
   tableId: string | null;
+  table?: {
+    id: string;
+    tableNumber: string;
+    qrToken?: {
+      token: string;
+    } | null;
+  } | null;
   orderNumber: string;
   status: 'RECEIVED' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
   subtotal: string;
@@ -404,8 +411,18 @@ function TrackPageContent() {
         <div className="mx-4 mt-6">
           <Button
             onClick={() => {
-              const lastToken = localStorage.getItem('ccb_last_token') || '';
-              router.push(`/menu.html?table=${order.tableId}&token=${lastToken}`);
+              const tableQrToken =
+                order.table?.qrToken?.token ||
+                (order.tableId ? localStorage.getItem(`ccb_table_qr_token_${order.tableId}`) : null) ||
+                localStorage.getItem('ccb_last_table_qr_token') ||
+                localStorage.getItem('ccb_last_token') ||
+                '';
+
+              if (order.tableId && tableQrToken) {
+                router.push(`/menu.html?table=${order.tableId}&token=${tableQrToken}`);
+              } else {
+                router.push('/menu.html');
+              }
             }}
             className="w-full bg-[#5C3A21] hover:bg-[#A0522D] text-white font-extrabold py-3 rounded-full flex items-center justify-center gap-2 shadow-lg"
           >

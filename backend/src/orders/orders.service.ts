@@ -385,7 +385,9 @@ export class OrdersService {
     const order = await this.prisma.order.findUnique({
       where: { publicTrackingToken: trackingToken },
       include: {
-        table: true,
+        table: {
+          include: { qrToken: true },
+        },
         items: {
           include: { addons: true },
         },
@@ -704,7 +706,7 @@ export class OrdersService {
         let isValid = false;
         if (
           oldStatus === OrderStatus.RECEIVED &&
-          newStatus === OrderStatus.ACCEPTED
+          (newStatus === OrderStatus.ACCEPTED || newStatus === OrderStatus.PREPARING)
         )
           isValid = true;
         else if (
@@ -714,7 +716,7 @@ export class OrdersService {
           isValid = true;
         else if (
           oldStatus === OrderStatus.PREPARING &&
-          newStatus === OrderStatus.READY
+          (newStatus === OrderStatus.READY || newStatus === OrderStatus.SERVED)
         )
           isValid = true;
         else if (
@@ -734,17 +736,20 @@ export class OrdersService {
           );
         }
 
-        // Waiter role restrictions: can only perform READY -> SERVED
+        // Waiter role restrictions: can mark PREPARING/READY -> SERVED
         if (
           role === Role.WAITER &&
-          !(oldStatus === OrderStatus.READY && newStatus === OrderStatus.SERVED)
+          !(
+            (oldStatus === OrderStatus.READY || oldStatus === OrderStatus.PREPARING) &&
+            newStatus === OrderStatus.SERVED
+          )
         ) {
           throw new BadRequestException(
-            'Waiter role is only permitted to mark orders as SERVED.',
+            'Waiter role is permitted to mark orders as SERVED.',
           );
         }
 
-        // Cashier role restrictions: can only mark SERVED -> COMPLETED
+        // Cashier role restrictions: can mark SERVED -> COMPLETED
         if (
           role === Role.CASHIER &&
           !(
@@ -753,7 +758,7 @@ export class OrdersService {
           )
         ) {
           throw new BadRequestException(
-            'Cashier role is only permitted to mark orders as COMPLETED.',
+            'Cashier role is permitted to mark orders as COMPLETED.',
           );
         }
       }

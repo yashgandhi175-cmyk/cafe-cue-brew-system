@@ -233,6 +233,8 @@ function MenuPageContent() {
         });
         setTableNumber(valRes.data.tableNumber);
         localStorage.setItem('ccb_last_token', token);
+        localStorage.setItem('ccb_last_table_qr_token', token);
+        localStorage.setItem(`ccb_table_qr_token_${tableId}`, token);
 
         // 2. Load settings, categories, banners, coupons
         const [settingsRes, categoriesRes, bannersRes, couponsRes] = await Promise.all([
