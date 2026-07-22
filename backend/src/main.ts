@@ -24,8 +24,11 @@ process.on('exit', (code) => {
 });
 
 async function bootstrap() {
+  console.log('[BOOTSTRAP STEP 1/6] Application process started.');
+
   // Sanitize and percent-encode DATABASE_URL password and append connection pool parameters
   if (process.env.DATABASE_URL) {
+    console.log('[BOOTSTRAP STEP 2/6] Evaluating DATABASE_URL parameters...');
     let dbUrl = process.env.DATABASE_URL;
     const match = dbUrl.match(/^(mysql:\/\/([^:]+):)(.*)(@([^@]+)\/([^/]+))$/);
     if (match) {
@@ -47,9 +50,13 @@ async function bootstrap() {
     console.warn('WARNING: DATABASE_URL environment variable is not defined!');
   }
 
+  console.log('[BOOTSTRAP STEP 3/6] Initializing NestFactory AppModule...');
   const app = await NestFactory.create(AppModule);
+  console.log('[BOOTSTRAP STEP 4/6] NestFactory AppModule created successfully.');
+
   const configService = app.get(ConfigService);
 
+  console.log('[BOOTSTRAP STEP 5/6] Setting up CORS, validation pipes, and API prefix...');
   // Enable CORS
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
@@ -84,10 +91,13 @@ async function bootstrap() {
   // Set global prefix for all API controllers
   app.setGlobalPrefix('api');
 
-
-
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`Application is running on: ${port}`);
+  console.log(`[BOOTSTRAP STEP 6/6] Binding server listener to 0.0.0.0:${port}...`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`[BOOTSTRAP SUCCESS] Server actively listening on 0.0.0.0:${port}`);
 }
-void bootstrap();
+
+bootstrap().catch((err) => {
+  console.error('[BOOTSTRAP FATAL ERROR] Application failed during startup:', err);
+  process.exit(1);
+});
