@@ -111,17 +111,17 @@ export class PaymentsService {
           throw new BadRequestException('Credit is currently disabled.');
         }
 
-        // 4. Calculate Authoritative Balance (counting cash/card/upi/credit all as resolving the bill)
-        const existingPayments = await tx.payment.findMany({
-          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED },
+        // 4. Calculate Authoritative Balance (only counting actual settled payments)
+        const existingSettledPayments = await tx.payment.findMany({
+          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
         });
 
-        const totalResolvedSum = existingPayments
+        const totalSettledSum = existingSettledPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
 
         const grandTotal = Number(bill.grandTotal);
         const outstanding = this.calcService.roundToTwo(
-          grandTotal - totalResolvedSum,
+          grandTotal - totalSettledSum,
         );
 
         if (outstanding <= 0) {
@@ -237,31 +237,59 @@ export class PaymentsService {
               updatedById: staffId,
             },
           });
+        } else {
+          // If paying off an outstanding credit bill with Cash/UPI/Card, update any associated CreditLedger entries
+          if (bill.order?.customerId) {
+            const creditEntry = await tx.creditLedger.findFirst({
+              where: {
+                customerId: bill.order.customerId,
+                invoiceNumber: bill.invoiceNumber || undefined,
+                settlementStatus: { in: ['UNPAID', 'PARTIAL'] },
+              },
+            });
+            if (creditEntry) {
+              const remCredit = Math.max(0, Number(creditEntry.outstandingAmount) - finalSettledAmount);
+              await tx.creditLedger.update({
+                where: { id: creditEntry.id },
+                data: {
+                  outstandingAmount: remCredit,
+                  settlementStatus: remCredit <= 0 ? 'PAID' : 'PARTIAL',
+                  updatedById: staffId,
+                },
+              });
+            }
+          }
         }
 
         // 8. Re-evaluate overall payments
-        const allPayments = await tx.payment.findMany({
-          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED },
+        const allSettledPayments = await tx.payment.findMany({
+          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
         });
 
-        const finalResolvedSum = allPayments
+        const finalSettledSum = allSettledPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
 
-        const hasCredit = allPayments.some((p) => p.method === PaymentMethod.CREDIT);
+        const creditPayments = await tx.payment.findMany({
+          where: { billId: bill.id, method: PaymentMethod.CREDIT },
+        });
+        const hasCreditPayment = creditPayments.length > 0;
 
         let finalPaymentStatus: PaymentStatus = PaymentStatus.UNPAID;
         let finalBillStatus: BillStatus = BillStatus.FINALIZED;
 
-        if (finalResolvedSum >= grandTotal) {
-          finalPaymentStatus = hasCredit ? PaymentStatus.CREDIT : PaymentStatus.PAID;
+        if (finalSettledSum >= grandTotal) {
+          finalPaymentStatus = PaymentStatus.PAID;
           finalBillStatus = BillStatus.PAID;
-        } else if (finalResolvedSum > 0) {
+        } else if (hasCreditPayment) {
+          finalPaymentStatus = PaymentStatus.CREDIT;
+          finalBillStatus = BillStatus.FINALIZED;
+        } else if (finalSettledSum > 0) {
           finalPaymentStatus = PaymentStatus.PARTIAL;
           finalBillStatus = BillStatus.FINALIZED;
         }
 
         // Unexpected integrity check (Correction 3)
-        if (finalResolvedSum > grandTotal) {
+        if (finalSettledSum > grandTotal) {
           throw new ConflictException(
             'Financial integrity check failed: settled payments exceed grand total.',
           );
