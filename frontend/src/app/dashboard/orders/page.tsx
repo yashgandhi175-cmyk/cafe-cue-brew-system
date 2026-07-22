@@ -177,7 +177,7 @@ export default function OrdersPage() {
     }
     return false;
   });
-  const [selectedMobileStatusTab, setSelectedMobileStatusTab] = useState<'RECEIVED' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'SERVED'>('RECEIVED');
+  const [selectedMobileStatusTab, setSelectedMobileStatusTab] = useState<'RECEIVED' | 'PREPARING' | 'SERVED'>('RECEIVED');
   
   // Dialog/Detail state
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -698,7 +698,7 @@ export default function OrdersPage() {
           <div className="lg:col-span-3 space-y-4">
             {/* Mobile Tab Switcher */}
             <div className="md:hidden flex gap-1 overflow-x-auto no-scrollbar bg-stone-100 p-1 rounded-xl border border-stone-200">
-              {(['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED'] as const).map((s) => (
+              {(['RECEIVED', 'PREPARING', 'SERVED'] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setSelectedMobileStatusTab(s)}
@@ -714,8 +714,8 @@ export default function OrdersPage() {
             </div>
 
             {/* Columns grid */}
-            <div className="hidden md:grid grid-cols-5 gap-3.5 items-start">
-              {(['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY', 'SERVED'] as const).map((status) => {
+            <div className="hidden md:grid grid-cols-3 gap-4 items-start">
+              {(['RECEIVED', 'PREPARING', 'SERVED'] as const).map((status) => {
                 const list = groupOrdersForStatus(status);
                 return (
                   <div key={status} className="bg-stone-50 border border-stone-200/80 rounded-2xl p-3 space-y-3 min-h-[500px]">
@@ -1167,54 +1167,39 @@ export default function OrdersPage() {
 
                 {/* Transitions buttons list */}
                 <div className="flex flex-wrap gap-2">
-                  {/* RECEIVED -> ACCEPTED */}
-                  {selectedOrder.status === 'RECEIVED' && (isOwner || isManager) && (
-                    <Button
-                      onClick={() => executeStatusUpdate('ACCEPTED')}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg"
-                    >
-                      Accept Order
-                    </Button>
-                  )}
-
-                  {/* ACCEPTED -> PREPARING */}
-                  {selectedOrder.status === 'ACCEPTED' && (isOwner || isManager) && (
+                  {/* RECEIVED / ACCEPTED -> PREPARING */}
+                  {['RECEIVED', 'ACCEPTED'].includes(selectedOrder.status) && canModifyStatus && (
                     <Button
                       onClick={() => executeStatusUpdate('PREPARING')}
-                      className="bg-[#8F6A50] hover:bg-[#5C3A21] text-white font-bold px-4 py-2 rounded-lg"
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-1.5"
                     >
-                      Start Preparation
+                      <span>Start Preparing</span>
                     </Button>
                   )}
 
-                  {/* PREPARING -> READY */}
-                  {selectedOrder.status === 'PREPARING' && (isOwner || isManager) && (
-                    <Button
-                      onClick={() => executeStatusUpdate('READY')}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg"
-                    >
-                      Mark Ready to Serve
-                    </Button>
-                  )}
-
-                  {/* READY -> SERVED */}
-                  {selectedOrder.status === 'READY' && (isOwner || isManager || isWaiter) && (
+                  {/* PREPARING / READY -> SERVED */}
+                  {['PREPARING', 'READY'].includes(selectedOrder.status) && canModifyStatus && (
                     <Button
                       onClick={() => executeStatusUpdate('SERVED')}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-1.5"
                     >
-                      Mark Served
+                      <span>Mark Served</span>
                     </Button>
                   )}
 
                   {/* SERVED -> COMPLETED */}
-                  {selectedOrder.status === 'SERVED' && (isOwner || isManager || isCashier) && (
-                    <Button
-                      onClick={() => executeStatusUpdate('COMPLETED')}
-                      className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg"
-                    >
-                      Complete Order
-                    </Button>
+                  {selectedOrder.status === 'SERVED' && canModifyStatus && (
+                    <div className="w-full space-y-2">
+                      <Button
+                        onClick={() => executeStatusUpdate('COMPLETED')}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-1.5"
+                      >
+                        <span>Complete Order</span>
+                      </Button>
+                      <p className="text-[10px] text-stone-400 font-semibold italic">
+                        * Note: Served orders auto-complete when the table bill is settled in POS / Settlements.
+                      </p>
+                    </div>
                   )}
 
                   {/* Fallback override action buttons */}

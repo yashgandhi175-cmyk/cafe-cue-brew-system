@@ -60,11 +60,9 @@ interface SettingsDetails {
 
 const STATUS_STEPS = [
   { status: 'RECEIVED', label: 'Order Received', desc: 'Sent to the kitchen' },
-  { status: 'ACCEPTED', label: 'Order Accepted', desc: 'Kitchen confirmed details' },
-  { status: 'PREPARING', label: 'Preparing', desc: 'Chefs are brewing/cooking' },
-  { status: 'READY', label: 'Ready to Serve', desc: 'Fresh & ready at counter' },
-  { status: 'SERVED', label: 'Served', desc: 'Enjoy your food & drinks!' },
-  { status: 'COMPLETED', label: 'Completed', desc: 'Paid & finished' },
+  { status: 'PREPARING', label: 'Preparing', desc: 'Chefs are cooking your items' },
+  { status: 'SERVED', label: 'Served', desc: 'Served at your table' },
+  { status: 'COMPLETED', label: 'Completed', desc: 'Bill settled & finished' },
 ];
 
 function TrackPageContent() {
@@ -207,7 +205,11 @@ function TrackPageContent() {
   const getStepStatus = (stepStatus: string) => {
     if (isCancelled || isVoided) return 'inactive';
 
-    const currentIdx = STATUS_STEPS.findIndex((s) => s.status === currentStatus);
+    let normalizedCurrent = currentStatus;
+    if (normalizedCurrent === 'ACCEPTED') normalizedCurrent = 'PREPARING';
+    if (normalizedCurrent === 'READY') normalizedCurrent = 'SERVED';
+
+    const currentIdx = STATUS_STEPS.findIndex((s) => s.status === normalizedCurrent);
     const stepIdx = STATUS_STEPS.findIndex((s) => s.status === stepStatus);
 
     if (stepIdx < currentIdx) return 'completed';

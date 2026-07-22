@@ -12,6 +12,7 @@ import {
   PaymentStatus,
   PaymentMethod,
   PaymentStatusDetail,
+  OrderStatus,
 } from '@prisma/client';
 
 @Injectable()
@@ -292,14 +293,31 @@ export class PaymentsService {
           });
         }
 
-        // 8.5 Close TableSession & Release table & Clear cart if bill is fully closed/settled
+        // 8.5 Close TableSession & Release table & Clear cart & Complete orders if bill is fully closed/settled
         if (finalBillStatus === BillStatus.PAID) {
           if (bill.tableSessionId) {
+            await tx.order.updateMany({
+              where: {
+                tableSessionId: bill.tableSessionId,
+                status: { notIn: [OrderStatus.CANCELLED, OrderStatus.VOIDED] },
+              },
+              data: {
+                status: OrderStatus.COMPLETED,
+              },
+            });
+
             await tx.tableSession.update({
               where: { id: bill.tableSessionId },
               data: {
                 status: 'CLOSED',
                 closedAt: new Date(),
+              },
+            });
+          } else if (bill.orderId) {
+            await tx.order.update({
+              where: { id: bill.orderId },
+              data: {
+                status: OrderStatus.COMPLETED,
               },
             });
           }
