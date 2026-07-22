@@ -40,7 +40,7 @@ async function bootstrap() {
     }
     if (!dbUrl.includes('connection_limit')) {
       const separator = dbUrl.includes('?') ? '&' : '?';
-      dbUrl += `${separator}connection_limit=10&connect_timeout=30`;
+      dbUrl += `${separator}connection_limit=25&connect_timeout=10&pool_timeout=10`;
     }
     process.env.DATABASE_URL = dbUrl;
   } else {
