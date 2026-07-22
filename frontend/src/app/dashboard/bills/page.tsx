@@ -229,7 +229,10 @@ export default function SettlementsPage() {
       g.paymentStatus = allPaid ? 'PAID' : anyPartial ? 'PARTIALLY_PAID' : 'UNPAID';
 
       const numOrders = g.orders.length;
-      g.orderNumber = numOrders > 1 ? `Table ${g.tableNumberSnapshot} (${numOrders} Orders)` : g.orders[0].orderNumber;
+      const cleanTable = g.tableNumberSnapshot
+        ? (g.tableNumberSnapshot.toLowerCase().startsWith('table') ? g.tableNumberSnapshot : `Table ${g.tableNumberSnapshot}`)
+        : 'Table Session';
+      g.orderNumber = numOrders > 1 ? `${cleanTable} (${numOrders} Orders)` : g.orders[0].orderNumber;
       return g as unknown as Order;
     });
 
@@ -250,12 +253,6 @@ export default function SettlementsPage() {
         setCashTendered(outstanding);
 
         fetchLoyaltyInfoForOrder(ord).catch(() => {});
-      }
-    } else if (groupedOrders.length > 0) {
-      // Auto-select first unpaid order on page load
-      const firstUnpaid = groupedOrders.find((o) => o.paymentStatus !== 'PAID') || groupedOrders[0];
-      if (firstUnpaid) {
-        setSelectedOrderId(firstUnpaid.id);
       }
     } else {
       setSelectedOrder(null);
@@ -429,7 +426,8 @@ export default function SettlementsPage() {
 
     try {
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/billing/orders/${selectedOrder.id}/discount`, {
+      const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
+      const res = await fetch(`${API_URL}/billing/orders/${targetId}/discount`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -468,7 +466,8 @@ export default function SettlementsPage() {
 
     try {
       const token = localStorage.getItem('ccb_token');
-      const res = await fetch(`${API_URL}/billing/orders/${selectedOrder.id}/finalize`, {
+      const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
+      const res = await fetch(`${API_URL}/billing/orders/${targetId}/finalize`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
