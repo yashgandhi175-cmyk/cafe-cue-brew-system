@@ -576,16 +576,7 @@ export class OrdersService {
     const limit = Number(filters.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {
-      AND: [
-        {
-          OR: [
-            { tableSessionId: null },
-            { bills: { some: {} } }
-          ]
-        }
-      ]
-    };
+    const where: Prisma.OrderWhereInput = {};
 
     if (filters.status) (where as any).status = filters.status;
     if (filters.paymentStatus) (where as any).paymentStatus = filters.paymentStatus;
