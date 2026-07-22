@@ -24,19 +24,25 @@ process.on('exit', (code) => {
 });
 
 async function bootstrap() {
-  // Sanitize and percent-encode DATABASE_URL password if it contains special characters (like '@')
+  // Sanitize and percent-encode DATABASE_URL password and append connection pool parameters
   if (process.env.DATABASE_URL) {
-    const match = process.env.DATABASE_URL.match(/^(mysql:\/\/([^:]+):)(.*)(@([^@]+)\/([^/]+))$/);
+    let dbUrl = process.env.DATABASE_URL;
+    const match = dbUrl.match(/^(mysql:\/\/([^:]+):)(.*)(@([^@]+)\/([^/]+))$/);
     if (match) {
       const prefix = match[1];
       const rawPassword = match[3];
       const suffix = match[4];
       if (rawPassword && !rawPassword.includes('%')) {
         const encodedPassword = encodeURIComponent(rawPassword);
-        process.env.DATABASE_URL = `${prefix}${encodedPassword}${suffix}`;
+        dbUrl = `${prefix}${encodedPassword}${suffix}`;
         console.log('Sanitized DATABASE_URL password format for Prisma compatibility.');
       }
     }
+    if (!dbUrl.includes('connection_limit')) {
+      const separator = dbUrl.includes('?') ? '&' : '?';
+      dbUrl += `${separator}connection_limit=10&connect_timeout=30`;
+    }
+    process.env.DATABASE_URL = dbUrl;
   } else {
     console.warn('WARNING: DATABASE_URL environment variable is not defined!');
   }

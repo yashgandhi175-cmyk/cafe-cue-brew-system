@@ -6,8 +6,19 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
+  constructor() {
+    super({
+      log: ['error', 'warn'],
+    });
+  }
+
   async onModuleInit() {
-    // Let Prisma connect lazily on the first request context query to avoid pre-fork socket breakage
+    try {
+      await this.$connect();
+      console.log('PrismaService: Database connection pool initialized successfully.');
+    } catch (err) {
+      console.error('PrismaService: Database connection initialization error:', err);
+    }
   }
 
   async onModuleDestroy() {
