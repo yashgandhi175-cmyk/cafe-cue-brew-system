@@ -71,8 +71,14 @@ interface Order {
   status: string;
   paymentStatus: string;
   subtotal: number;
+  cgst?: number;
+  sgst?: number;
+  serviceCharge?: number;
+  nightCharge?: number;
+  roundOff?: number;
   grandTotal: number;
   createdAt: string;
+  tableSessionId?: string | null;
   tableNumberSnapshot?: string;
   customer?: { name: string; phone: string };
   items: OrderItem[];
@@ -392,9 +398,24 @@ export default function SettlementsPage() {
 
     try {
       const token = localStorage.getItem('ccb_token');
-      const currentBill = selectedOrder.bills.find((b) => b.status === 'FINALIZED' || b.status === 'PAID');
+      let currentBill = selectedOrder.bills.find((b) => b.status === 'FINALIZED' || b.status === 'PAID');
+
       if (!currentBill) {
-        throw new Error('Please finalize the bill before recording payments.');
+        // Automatically finalize the bill for the order/session
+        const targetId = (selectedOrder as any).primaryOrderId || selectedOrder.id;
+        const finRes = await fetch(`${API_URL}/billing/orders/${targetId}/finalize`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const finData = await finRes.json();
+        if (!finRes.ok) {
+          throw new Error(finData.message || 'Failed to finalize bill prior to payment.');
+        }
+        currentBill = finData;
+      }
+
+      if (!currentBill) {
+        throw new Error('Unable to create or locate bill for payment.');
       }
 
       const res = await fetch(`${API_URL}/payments`, {
@@ -663,6 +684,91 @@ export default function SettlementsPage() {
     return matchesSearch && matchesFilter && o.status !== 'CANCELLED' && o.status !== 'VOIDED';
   });
 
+  // Group orders by tableSessionId for active table sessions on Settlements page
+  const groupedOrders = (() => {
+    const sessionMap = new Map<string, {
+      id: string;
+      primaryOrderId: string;
+      orderNumber: string;
+      tableSessionId: string | null;
+      tableNumberSnapshot: string;
+      customer?: { name: string; phone: string };
+      orders: Order[];
+      items: OrderItem[];
+      subtotal: number;
+      cgst: number;
+      sgst: number;
+      serviceCharge: number;
+      nightCharge: number;
+      roundOff: number;
+      grandTotal: number;
+      paymentStatus: string;
+      status: string;
+      createdAt: string;
+      bills: Bill[];
+      payments: Payment[];
+    }>();
+
+    const standalone: Order[] = [];
+
+    for (const o of filteredOrders) {
+      if (o.tableSessionId) {
+        if (!sessionMap.has(o.tableSessionId)) {
+          sessionMap.set(o.tableSessionId, {
+            id: `session_${o.tableSessionId}`,
+            primaryOrderId: o.id,
+            orderNumber: `Table ${o.tableNumberSnapshot || 'Session'}`,
+            tableSessionId: o.tableSessionId,
+            tableNumberSnapshot: o.tableNumberSnapshot || 'Table',
+            customer: o.customer,
+            orders: [],
+            items: [],
+            subtotal: 0,
+            cgst: 0,
+            sgst: 0,
+            serviceCharge: 0,
+            nightCharge: 0,
+            roundOff: 0,
+            grandTotal: 0,
+            paymentStatus: 'UNPAID',
+            status: o.status,
+            createdAt: o.createdAt,
+            bills: [],
+            payments: [],
+          });
+        }
+
+        const group = sessionMap.get(o.tableSessionId)!;
+        group.orders.push(o);
+        group.items.push(...(o.items || []));
+        group.subtotal += Number(o.subtotal || 0);
+        group.cgst += Number(o.cgst || 0);
+        group.sgst += Number(o.sgst || 0);
+        group.serviceCharge += Number(o.serviceCharge || 0);
+        group.nightCharge += Number(o.nightCharge || 0);
+        group.roundOff += Number(o.roundOff || 0);
+        group.grandTotal += Number(o.grandTotal || 0);
+
+        if (o.bills) group.bills.push(...o.bills);
+        if (o.payments) group.payments.push(...o.payments);
+      } else {
+        standalone.push(o);
+      }
+    }
+
+    const sessionCards = Array.from(sessionMap.values()).map((g) => {
+      const allPaid = g.orders.every((o) => o.paymentStatus === 'PAID');
+      const anyPartial = g.orders.some((o) => o.paymentStatus === 'PARTIALLY_PAID' || o.paymentStatus === 'PAID');
+      g.paymentStatus = allPaid ? 'PAID' : anyPartial ? 'PARTIALLY_PAID' : 'UNPAID';
+
+      const numOrders = g.orders.length;
+      g.orderNumber = numOrders > 1 ? `Table ${g.tableNumberSnapshot} (${numOrders} Orders)` : g.orders[0].orderNumber;
+      return g as unknown as Order;
+    });
+
+    return [...sessionCards, ...standalone];
+  })();
+
   if (loading) {
     return (
       <div className="p-8 text-center text-[#3C2A21] font-semibold">
@@ -739,12 +845,12 @@ export default function SettlementsPage() {
 
         {/* Orders scroll list */}
         <div className="space-y-2">
-          {filteredOrders.length === 0 ? (
+          {groupedOrders.length === 0 ? (
             <div className="text-center py-10 text-xs text-gray-400">
               No orders matched selection.
             </div>
           ) : (
-            filteredOrders.map((o) => (
+            groupedOrders.map((o) => (
               <div
                 key={o.id}
                 onClick={() => setSelectedOrderId(o.id)}
@@ -840,73 +946,71 @@ export default function SettlementsPage() {
               </div>
 
               {/* Financial calculations summary */}
-              {activeBill && (
-                <div className="bg-[#FAF8F5] p-3 rounded-xl text-xs space-y-2">
-                  <div className="flex justify-between">
-                    <span>Subtotal:</span>
-                    <span>₹{Number(activeBill.subtotal).toFixed(2)}</span>
-                  </div>
-                  {Number((activeBill as any).couponDiscount || 0) > 0 && (
-                    <div className="flex justify-between text-emerald-700 font-bold">
-                      <span>Coupon Discount {activeBill.couponCodeSnapshot && `(${activeBill.couponCodeSnapshot})`}:</span>
-                      <span>-₹{Number((activeBill as any).couponDiscount).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number((activeBill as any).loyaltyDiscount || 0) > 0 && (
-                    <div className="flex justify-between text-emerald-700 font-bold">
-                      <span>Loyalty Discount:</span>
-                      <span>-₹{Number((activeBill as any).loyaltyDiscount).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number((activeBill as any).manualDiscount || 0) > 0 && (
-                    <div className="flex justify-between text-[#8F6A50] font-bold">
-                      <span>Manual Discount:</span>
-                      <span>-₹{Number((activeBill as any).manualDiscount).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Taxable Amount:</span>
-                    <span>₹{Number(activeBill.taxableAmount).toFixed(2)}</span>
-                  </div>
-                  {Number(activeBill.cgst) > 0 && (
-                    <>
-                      <div className="flex justify-between text-[11px] text-gray-500">
-                        <span>CGST (2.5%):</span>
-                        <span>₹{Number(activeBill.cgst).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-[11px] text-gray-500">
-                        <span>SGST (2.5%):</span>
-                        <span>₹{Number(activeBill.sgst).toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
-                  {Number(activeBill.serviceCharge) > 0 && (
-                    <div className="flex justify-between text-[11px] text-gray-500">
-                      <span>Service Charge:</span>
-                      <span>₹{Number(activeBill.serviceCharge).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(activeBill.nightCharge) > 0 && (
-                    <div className="flex justify-between text-[11px] text-gray-500">
-                      <span>Night Surcharge:</span>
-                      <span>₹{Number(activeBill.nightCharge).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(activeBill.roundOff) !== 0 && (
-                    <div className="flex justify-between text-[11px] text-gray-500">
-                      <span>Round Off:</span>
-                      <span>₹{Number(activeBill.roundOff).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-black text-sm pt-2 border-t border-[#EAD8C0]/30 text-[#8F6A50]">
-                    <span>Grand Total:</span>
-                    <span>₹{Number(activeBill.grandTotal).toFixed(2)}</span>
-                  </div>
+              <div className="bg-[#FAF8F5] p-3 rounded-xl text-xs space-y-2">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>₹{Number(activeBill?.subtotal || selectedOrder.subtotal).toFixed(2)}</span>
                 </div>
-              )}
+                {Number((activeBill as any)?.couponDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Coupon Discount {activeBill?.couponCodeSnapshot && `(${activeBill.couponCodeSnapshot})`}:</span>
+                    <span>-₹{Number((activeBill as any).couponDiscount).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number((activeBill as any)?.loyaltyDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Loyalty Discount:</span>
+                    <span>-₹{Number((activeBill as any).loyaltyDiscount).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number((activeBill as any)?.manualDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-[#8F6A50] font-bold">
+                    <span>Manual Discount:</span>
+                    <span>-₹{Number((activeBill as any).manualDiscount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Taxable Amount:</span>
+                  <span>₹{Number(activeBill?.taxableAmount || selectedOrder.subtotal).toFixed(2)}</span>
+                </div>
+                {Number(activeBill?.cgst || 0) > 0 && (
+                  <>
+                    <div className="flex justify-between text-[11px] text-gray-500">
+                      <span>CGST (2.5%):</span>
+                      <span>₹{Number(activeBill?.cgst).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-gray-500">
+                      <span>SGST (2.5%):</span>
+                      <span>₹{Number(activeBill?.sgst).toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
+                {Number(activeBill?.serviceCharge || 0) > 0 && (
+                  <div className="flex justify-between text-[11px] text-gray-500">
+                    <span>Service Charge:</span>
+                    <span>₹{Number(activeBill?.serviceCharge).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(activeBill?.nightCharge || 0) > 0 && (
+                  <div className="flex justify-between text-[11px] text-gray-500">
+                    <span>Night Surcharge:</span>
+                    <span>₹{Number(activeBill?.nightCharge).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(activeBill?.roundOff || 0) !== 0 && (
+                  <div className="flex justify-between text-[11px] text-gray-500">
+                    <span>Round Off:</span>
+                    <span>₹{Number(activeBill?.roundOff).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-sm pt-2 border-t border-[#EAD8C0]/30 text-[#8F6A50]">
+                  <span>Grand Total:</span>
+                  <span>₹{Number(activeBill?.grandTotal || selectedOrder.grandTotal).toFixed(2)}</span>
+                </div>
+              </div>
 
-              {/* Finalization and Manual Discounts for DRAFT */}
-              {activeBill?.status === 'DRAFT' && (
+              {/* Finalization and Manual Discounts */}
+              {(!activeBill || activeBill.status === 'DRAFT') && (
                 <div className="border-t border-[#FAF8F5] pt-4 space-y-4">
                   <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[11px] rounded-xl p-3 flex gap-2">
                     <Info className="h-4 w-4 shrink-0" />
@@ -1035,8 +1139,8 @@ export default function SettlementsPage() {
                             />
                             <button
                               type="button"
-                              onClick={() => handleCreateRedemptionRequest(activeBill.id, loyaltyProfile.customerId)}
-                              disabled={submitting || redeemPointsInput <= 0}
+                              onClick={() => activeBill?.id && handleCreateRedemptionRequest(activeBill.id, loyaltyProfile.customerId)}
+                              disabled={submitting || redeemPointsInput <= 0 || !activeBill?.id}
                               className="bg-[#8F6A50] hover:bg-[#3C2A21] text-white px-3 py-2 rounded-xl text-xs font-bold transition disabled:opacity-50"
                             >
                               REQUEST
@@ -1130,7 +1234,7 @@ export default function SettlementsPage() {
               </div>
 
               {/* Checkout settlements form */}
-              {activeBill && activeBill.status !== 'DRAFT' && outstandingAmount > 0 && (
+              {outstandingAmount > 0 && (
                 <div className="bg-white rounded-2xl p-5 border border-[#EAD8C0]/40 shadow-sm space-y-4">
                   <h3 className="font-bold text-xs uppercase tracking-wider text-gray-400">Record Settlement</h3>
 
