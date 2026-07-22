@@ -50,3 +50,26 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('ccb_token') : null;
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem('ccb_token');
+    localStorage.removeItem('ccb_staff');
+    if (!window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login?expired=true';
+    }
+  }
+
+  return res;
+}
+

@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchWithAuth } from '@/lib/api';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -390,18 +391,10 @@ export default function SettlementsPage() {
 
   const fetchOrders = async () => {
     try {
-      const token = localStorage.getItem('ccb_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
+      const res = await fetchWithAuth(`${API_URL}/orders?limit=100`);
 
-      const headers = { Authorization: `Bearer ${token}` };
-      const res = await fetch(`${API_URL}/orders?limit=100`, { headers });
-
-      if (res.status === 401) {
-        router.push('/login');
-        return;
+      if (!res.ok) {
+        throw new Error('Failed to load active orders list.');
       }
 
       const data = await res.json();

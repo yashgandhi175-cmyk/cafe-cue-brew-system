@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 'use client';
 
+import { fetchWithAuth } from '@/lib/api';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 import React, { useEffect, useState } from 'react';
@@ -99,32 +100,23 @@ export default function PosConsolePage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('ccb_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [catRes, itemRes, tableRes] = await Promise.all([
-        fetch(`${API_URL}/categories`, { headers }),
-        fetch(`${API_URL}/menu/items`, { headers }),
-        fetch(`${API_URL}/tables`, { headers }),
+        fetchWithAuth(`${API_URL}/categories`),
+        fetchWithAuth(`${API_URL}/menu/items`),
+        fetchWithAuth(`${API_URL}/tables`),
       ]);
 
-      if (catRes.status === 401 || itemRes.status === 401) {
-        router.push('/login');
-        return;
+      if (!catRes.ok || !itemRes.ok) {
+        throw new Error('Failed to load menu data.');
       }
 
       const cats = await catRes.json();
       const items = await itemRes.json();
       const tbls = await tableRes.json();
 
-      setCategories(cats.filter((c: Category) => c.isActive));
-      setMenuItems(items.filter((i: MenuItem) => i.isActive));
-      setTables(tbls.filter((t: RestaurantTable) => t.isActive));
+      setCategories(Array.isArray(cats) ? cats.filter((c: Category) => c.isActive) : []);
+      setMenuItems(Array.isArray(items) ? items.filter((i: MenuItem) => i.isActive) : []);
+      setTables(Array.isArray(tbls) ? tbls.filter((t: RestaurantTable) => t.isActive) : []);
       setLoading(false);
     } catch {
       setErrorMsg('Failed to load menu data. Please try again.');

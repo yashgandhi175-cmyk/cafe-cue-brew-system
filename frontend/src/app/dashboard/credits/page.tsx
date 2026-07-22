@@ -19,8 +19,9 @@ import {
   Loader2,
   CheckCircle,
 } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 interface CreditSummary {
   customerId: string;
@@ -108,21 +109,18 @@ export default function CreditLedgerPage() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('ccb_token');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch summaries
       const summaryUrl = search
         ? `${API_URL}/credits/summary?search=${encodeURIComponent(search)}`
         : `${API_URL}/credits/summary`;
       
-      const summaryRes = await fetch(summaryUrl, { headers });
+      const summaryRes = await fetchWithAuth(summaryUrl);
       if (!summaryRes.ok) throw new Error('Failed to fetch credit summaries');
       const summaryData = await summaryRes.json();
       setSummaries(summaryData);
 
       // Fetch analytics
-      const analyticsRes = await fetch(`${API_URL}/credits/analytics`, { headers });
+      const analyticsRes = await fetchWithAuth(`${API_URL}/credits/analytics`);
       if (!analyticsRes.ok) throw new Error('Failed to fetch credit analytics');
       const analyticsData = await analyticsRes.json();
       setAnalytics(analyticsData);
