@@ -573,7 +573,7 @@ export class OrdersService {
     endDate?: string;
   }) {
     const page = Number(filters.page) || 1;
-    const limit = Number(filters.limit) || 20;
+    const limit = Math.min(Number(filters.limit) || 100, 500);
     const skip = (page - 1) * limit;
 
     const where: Prisma.OrderWhereInput = {};

@@ -397,7 +397,7 @@ export default function SettlementsPage() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetchWithAuth(`${API_URL}/orders?limit=100`);
+      const res = await fetchWithAuth(`${API_URL}/orders?limit=200`);
 
       if (!res.ok) {
         throw new Error('Failed to load active orders list.');
@@ -956,68 +956,91 @@ export default function SettlementsPage() {
               </div>
 
               {/* Financial calculations summary */}
-              <div className="bg-[#FAF8F5] p-3 rounded-xl text-xs space-y-2">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>₹{Number(activeBill?.subtotal || selectedOrder.subtotal).toFixed(2)}</span>
-                </div>
-                {Number((activeBill as any)?.couponDiscount || 0) > 0 && (
-                  <div className="flex justify-between text-emerald-700 font-bold">
-                    <span>Coupon Discount {activeBill?.couponCodeSnapshot && `(${activeBill.couponCodeSnapshot})`}:</span>
-                    <span>-₹{Number((activeBill as any).couponDiscount).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number((activeBill as any)?.loyaltyDiscount || 0) > 0 && (
-                  <div className="flex justify-between text-emerald-700 font-bold">
-                    <span>Loyalty Discount:</span>
-                    <span>-₹{Number((activeBill as any).loyaltyDiscount).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number((activeBill as any)?.manualDiscount || 0) > 0 && (
-                  <div className="flex justify-between text-[#8F6A50] font-bold">
-                    <span>Manual Discount:</span>
-                    <span>-₹{Number((activeBill as any).manualDiscount).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Taxable Amount:</span>
-                  <span>₹{Number(activeBill?.taxableAmount || selectedOrder.subtotal).toFixed(2)}</span>
-                </div>
-                {Number(activeBill?.cgst || 0) > 0 && (
-                  <>
-                    <div className="flex justify-between text-[11px] text-gray-500">
-                      <span>CGST (2.5%):</span>
-                      <span>₹{Number(activeBill?.cgst).toFixed(2)}</span>
+              {(() => {
+                const isFinalizedMatchingBill =
+                  activeBill &&
+                  activeBill.status === 'FINALIZED' &&
+                  Math.abs(Number(activeBill.grandTotal) - Number(selectedOrder.grandTotal)) < 0.01;
+
+                const ordAny = selectedOrder as any;
+                const displaySubtotal = isFinalizedMatchingBill ? activeBill.subtotal : selectedOrder.subtotal;
+                const displayTaxableAmount = isFinalizedMatchingBill ? activeBill.taxableAmount : (ordAny.taxableAmount || selectedOrder.subtotal);
+                const displayCGST = isFinalizedMatchingBill ? activeBill.cgst : (ordAny.cgst || 0);
+                const displaySGST = isFinalizedMatchingBill ? activeBill.sgst : (ordAny.sgst || 0);
+                const displayServiceCharge = isFinalizedMatchingBill ? activeBill.serviceCharge : (ordAny.serviceCharge || 0);
+                const displayNightCharge = isFinalizedMatchingBill ? activeBill.nightCharge : (ordAny.nightCharge || 0);
+                const displayRoundOff = isFinalizedMatchingBill ? activeBill.roundOff : (ordAny.roundOff || 0);
+                const displayGrandTotal = isFinalizedMatchingBill ? activeBill.grandTotal : selectedOrder.grandTotal;
+
+                const displayCouponDiscount = activeBill?.couponDiscount || (selectedOrder as any).couponDiscount || 0;
+                const displayLoyaltyDiscount = (activeBill as any)?.loyaltyDiscount || 0;
+                const displayManualDiscount = (activeBill as any)?.manualDiscount || (selectedOrder as any).discount || 0;
+
+                return (
+                  <div className="bg-[#FAF8F5] p-3 rounded-xl text-xs space-y-2">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>₹{Number(displaySubtotal).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-gray-500">
-                      <span>SGST (2.5%):</span>
-                      <span>₹{Number(activeBill?.sgst).toFixed(2)}</span>
+                    {Number(displayCouponDiscount) > 0 && (
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Coupon Discount {activeBill?.couponCodeSnapshot && `(${activeBill.couponCodeSnapshot})`}:</span>
+                        <span>-₹{Number(displayCouponDiscount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(displayLoyaltyDiscount) > 0 && (
+                      <div className="flex justify-between text-emerald-700 font-bold">
+                        <span>Loyalty Discount:</span>
+                        <span>-₹{Number(displayLoyaltyDiscount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(displayManualDiscount) > 0 && (
+                      <div className="flex justify-between text-[#8F6A50] font-bold">
+                        <span>Manual Discount:</span>
+                        <span>-₹{Number(displayManualDiscount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Taxable Amount:</span>
+                      <span>₹{Number(displayTaxableAmount).toFixed(2)}</span>
                     </div>
-                  </>
-                )}
-                {Number(activeBill?.serviceCharge || 0) > 0 && (
-                  <div className="flex justify-between text-[11px] text-gray-500">
-                    <span>Service Charge:</span>
-                    <span>₹{Number(activeBill?.serviceCharge).toFixed(2)}</span>
+                    {Number(displayCGST) > 0 && (
+                      <>
+                        <div className="flex justify-between text-[11px] text-gray-500">
+                          <span>CGST (2.5%):</span>
+                          <span>₹{Number(displayCGST).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-gray-500">
+                          <span>SGST (2.5%):</span>
+                          <span>₹{Number(displaySGST).toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    {Number(displayServiceCharge) > 0 && (
+                      <div className="flex justify-between text-[11px] text-gray-500">
+                        <span>Service Charge:</span>
+                        <span>₹{Number(displayServiceCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(displayNightCharge) > 0 && (
+                      <div className="flex justify-between text-[11px] text-gray-500">
+                        <span>Night Surcharge:</span>
+                        <span>₹{Number(displayNightCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(displayRoundOff) !== 0 && (
+                      <div className="flex justify-between text-[11px] text-gray-500">
+                        <span>Round Off:</span>
+                        <span>₹{Number(displayRoundOff).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-sm pt-2 border-t border-[#EAD8C0]/30 text-[#8F6A50]">
+                      <span>Grand Total:</span>
+                      <span>₹{Number(displayGrandTotal).toFixed(2)}</span>
+                    </div>
                   </div>
-                )}
-                {Number(activeBill?.nightCharge || 0) > 0 && (
-                  <div className="flex justify-between text-[11px] text-gray-500">
-                    <span>Night Surcharge:</span>
-                    <span>₹{Number(activeBill?.nightCharge).toFixed(2)}</span>
-                  </div>
-                )}
-                {Number(activeBill?.roundOff || 0) !== 0 && (
-                  <div className="flex justify-between text-[11px] text-gray-500">
-                    <span>Round Off:</span>
-                    <span>₹{Number(activeBill?.roundOff).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-black text-sm pt-2 border-t border-[#EAD8C0]/30 text-[#8F6A50]">
-                  <span>Grand Total:</span>
-                  <span>₹{Number(activeBill?.grandTotal || selectedOrder.grandTotal).toFixed(2)}</span>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Finalization and Manual Discounts */}
               {(!activeBill || activeBill.status === 'DRAFT') && (

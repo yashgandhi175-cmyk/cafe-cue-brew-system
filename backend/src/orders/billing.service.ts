@@ -9,6 +9,7 @@ import { FinancialCalculationService } from './financial-calculation.service';
 import {
   Role,
   BillStatus,
+  PaymentStatus,
   LoyaltyTransactionType,
   Prisma,
 } from '@prisma/client';
@@ -239,6 +240,36 @@ export class BillingService {
           });
 
       if (existingFinalized) {
+        if (
+          existingFinalized.status === BillStatus.FINALIZED &&
+          existingFinalized.paymentStatus === PaymentStatus.UNPAID &&
+          Number(existingFinalized.grandTotal) !== Number(order.grandTotal)
+        ) {
+          const calcResult = this.calcService.calculate({
+            subtotal: Number(order.subtotal),
+            manualDiscount: Number(existingFinalized.manualDiscount),
+            couponDiscount: Number(existingFinalized.couponDiscount),
+            loyaltyDiscount: Number(existingFinalized.loyaltyDiscount),
+            settings,
+            applyNightChargeOverride: Number(order.nightCharge) > 0,
+          });
+
+          return await tx.bill.update({
+            where: { id: existingFinalized.id },
+            data: {
+              subtotal: calcResult.subtotal,
+              discount: calcResult.discount,
+              totalDiscount: calcResult.discount,
+              taxableAmount: calcResult.taxableAmount,
+              cgst: calcResult.cgst,
+              sgst: calcResult.sgst,
+              serviceCharge: calcResult.serviceCharge,
+              nightCharge: calcResult.nightCharge,
+              roundOff: calcResult.roundOff,
+              grandTotal: calcResult.grandTotal,
+            },
+          });
+        }
         return existingFinalized;
       }
 
