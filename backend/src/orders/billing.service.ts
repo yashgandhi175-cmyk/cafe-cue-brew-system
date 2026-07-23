@@ -239,14 +239,30 @@ export class BillingService {
             },
           });
 
+      // Compute merged session subtotal if tableSessionId exists
+      let effectiveSubtotal = Number(order.subtotal);
+      if (order.tableSessionId && typeof tx.order?.findMany === 'function') {
+        const sessionOrders = await tx.order.findMany({
+          where: {
+            tableSessionId: order.tableSessionId,
+            status: { notIn: ['CANCELLED', 'VOIDED'] },
+          },
+          include: { items: true },
+        }).catch(() => []);
+        const sessionSum = (sessionOrders as any[]).reduce((sum: number, so: any) => {
+          const itemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
+          return sum + (itemSum || Number(so.subtotal || 0));
+        }, 0);
+        if (Number(sessionSum) > 0) effectiveSubtotal = Number(sessionSum);
+      }
+
       if (existingFinalized) {
         if (
           existingFinalized.status === BillStatus.FINALIZED &&
-          existingFinalized.paymentStatus === PaymentStatus.UNPAID &&
-          Number(existingFinalized.grandTotal) !== Number(order.grandTotal)
+          existingFinalized.paymentStatus === PaymentStatus.UNPAID
         ) {
           const calcResult = this.calcService.calculate({
-            subtotal: Number(order.subtotal),
+            subtotal: effectiveSubtotal,
             manualDiscount: Number(existingFinalized.manualDiscount),
             couponDiscount: Number(existingFinalized.couponDiscount),
             loyaltyDiscount: Number(existingFinalized.loyaltyDiscount),

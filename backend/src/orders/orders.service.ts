@@ -1981,20 +1981,36 @@ export class OrdersService {
       data: { tableSessionId: session.id },
     });
 
+    // Find any existing non-voided bill for this session
     let bill = await tx.bill.findFirst({
-      where: { tableSessionId: session.id, status: 'DRAFT' },
+      where: { tableSessionId: session.id, status: { not: BillStatus.VOIDED } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Calculate total subtotal across all active orders in the table session
+    const sessionOrders = (typeof tx.order?.findMany === 'function')
+      ? await tx.order.findMany({
+          where: {
+            tableSessionId: session.id,
+            status: { notIn: ['CANCELLED', 'VOIDED'] },
+          },
+          include: { items: true },
+        }).catch(() => [])
+      : [];
+
+    const sessionSubtotal = (sessionOrders as any[]).reduce((sum: number, so: any) => {
+      const orderItemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
+      return sum + (orderItemSum || Number(so.subtotal || 0));
+    }, 0);
+
+    const mergedCalc = this.calcService.calculate({
+      subtotal: sessionSubtotal > 0 ? sessionSubtotal : calcResult.subtotal,
+      manualDiscount: bill ? Number(bill.manualDiscount) : 0,
+      couponDiscount: bill ? Number(bill.couponDiscount) : 0,
+      settings,
     });
 
     if (bill) {
-      const newSubtotal = Number(bill.subtotal) + Number(calcResult.subtotal);
-
-      const mergedCalc = this.calcService.calculate({
-        subtotal: newSubtotal,
-        manualDiscount: Number(bill.manualDiscount),
-        couponDiscount: Number(bill.couponDiscount),
-        settings,
-      });
-
       bill = await tx.bill.update({
         where: { id: bill.id },
         data: {
@@ -2018,19 +2034,19 @@ export class OrdersService {
           paymentStatus: 'UNPAID',
           orderId,
           tableSessionId: session.id,
-          subtotal: calcResult.subtotal,
-          discount: calcResult.discount,
+          subtotal: mergedCalc.subtotal,
+          discount: mergedCalc.discount,
           itemDiscount: 0.0,
-          couponDiscount: calcResult.couponDiscount,
-          manualDiscount: calcResult.manualDiscount,
-          totalDiscount: calcResult.discount,
-          taxableAmount: calcResult.taxableAmount,
-          cgst: calcResult.cgst,
-          sgst: calcResult.sgst,
-          serviceCharge: calcResult.serviceCharge,
-          nightCharge: calcResult.nightCharge,
-          roundOff: calcResult.roundOff,
-          grandTotal: calcResult.grandTotal,
+          couponDiscount: mergedCalc.couponDiscount,
+          manualDiscount: mergedCalc.manualDiscount,
+          totalDiscount: mergedCalc.discount,
+          taxableAmount: mergedCalc.taxableAmount,
+          cgst: mergedCalc.cgst,
+          sgst: mergedCalc.sgst,
+          serviceCharge: mergedCalc.serviceCharge,
+          nightCharge: mergedCalc.nightCharge,
+          roundOff: mergedCalc.roundOff,
+          grandTotal: mergedCalc.grandTotal,
         },
       });
     }
