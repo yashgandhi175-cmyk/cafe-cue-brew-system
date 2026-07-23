@@ -111,10 +111,63 @@ export class PaymentsService {
           throw new BadRequestException('Credit is currently disabled.');
         }
 
-        // 4. Calculate Authoritative Balance (only counting actual settled payments)
-        const existingSettledPayments = await tx.payment.findMany({
-          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
-        });
+        // 4. Sync live session items total to bill if session exists
+        let liveGrandTotal = Number(bill.grandTotal);
+        if (bill.tableSessionId && typeof tx.order?.findMany === 'function') {
+          const sessionOrders = await tx.order.findMany({
+            where: {
+              tableSessionId: bill.tableSessionId,
+              status: { notIn: ['CANCELLED', 'VOIDED'] },
+            },
+            include: { items: true },
+          }).catch(() => []);
+
+          const sessionSubtotal = (sessionOrders as any[]).reduce((sum: number, so: any) => {
+            const itemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
+            return sum + (itemSum || Number(so.subtotal || 0));
+          }, 0);
+
+          if (Number(sessionSubtotal) > 0) {
+            const calcResult = this.calcService.calculate({
+              subtotal: Number(sessionSubtotal),
+              manualDiscount: Number(bill.manualDiscount),
+              couponDiscount: Number(bill.couponDiscount),
+              loyaltyDiscount: Number(bill.loyaltyDiscount),
+              settings,
+            });
+            liveGrandTotal = Number(calcResult.grandTotal);
+
+            if (Number(bill.grandTotal) !== liveGrandTotal) {
+              await tx.bill.update({
+                where: { id: bill.id },
+                data: {
+                  subtotal: calcResult.subtotal,
+                  taxableAmount: calcResult.taxableAmount,
+                  cgst: calcResult.cgst,
+                  sgst: calcResult.sgst,
+                  serviceCharge: calcResult.serviceCharge,
+                  nightCharge: calcResult.nightCharge,
+                  roundOff: calcResult.roundOff,
+                  grandTotal: calcResult.grandTotal,
+                },
+              });
+              bill.grandTotal = liveGrandTotal as any;
+            }
+          }
+        }
+
+        // Calculate Authoritative Balance (only counting actual settled payments)
+        const existingSettledPayments = bill.tableSessionId
+          ? await tx.payment.findMany({
+              where: {
+                order: { tableSessionId: bill.tableSessionId },
+                status: PaymentStatusDetail.COMPLETED,
+                isSettled: true,
+              },
+            })
+          : await tx.payment.findMany({
+              where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
+            });
 
         const totalSettledSum = existingSettledPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
@@ -286,16 +339,31 @@ export class PaymentsService {
         }
 
         // 8. Re-evaluate overall payments
-        const allSettledPayments = await tx.payment.findMany({
-          where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
-        });
+        const allSettledPayments = bill.tableSessionId
+          ? await tx.payment.findMany({
+              where: {
+                order: { tableSessionId: bill.tableSessionId },
+                status: PaymentStatusDetail.COMPLETED,
+                isSettled: true,
+              },
+            })
+          : await tx.payment.findMany({
+              where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
+            });
 
         const finalSettledSum = allSettledPayments
           .reduce((sum, p) => sum + Number(p.amount), 0);
 
-        const creditPayments = await tx.payment.findMany({
-          where: { billId: bill.id, method: PaymentMethod.CREDIT },
-        });
+        const creditPayments = bill.tableSessionId
+          ? await tx.payment.findMany({
+              where: {
+                order: { tableSessionId: bill.tableSessionId },
+                method: PaymentMethod.CREDIT,
+              },
+            })
+          : await tx.payment.findMany({
+              where: { billId: bill.id, method: PaymentMethod.CREDIT },
+            });
         const hasCreditPayment = creditPayments.length > 0;
 
         let finalPaymentStatus: PaymentStatus = PaymentStatus.UNPAID;
