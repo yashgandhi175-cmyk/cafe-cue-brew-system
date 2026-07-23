@@ -13,6 +13,13 @@ export class CreditsService {
       whereClause.OR = [
         { name: { contains: search } },
         { phone: { contains: search } },
+        {
+          creditLedgers: {
+            some: {
+              invoiceNumber: { contains: search },
+            },
+          },
+        },
       ];
     }
 
