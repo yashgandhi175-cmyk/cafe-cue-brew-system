@@ -32,7 +32,7 @@ export class PaymentsService {
       amountTendered?: number;
       reference?: string;
       paymentIdempotencyKey?: string;
-      creditType?: 'UNTIL_PAY' | 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM';
+      creditType?: 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM';
       dueDate?: string;
       notes?: string;
     },
