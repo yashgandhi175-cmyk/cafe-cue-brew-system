@@ -72,6 +72,7 @@ interface Order {
   status: string;
   paymentStatus: string;
   subtotal: number;
+  taxableAmount?: number;
   cgst?: number;
   sgst?: number;
   serviceCharge?: number;
@@ -164,6 +165,7 @@ export default function SettlementsPage() {
       orders: Order[];
       items: OrderItem[];
       subtotal: number;
+      taxableAmount: number;
       cgst: number;
       sgst: number;
       serviceCharge: number;
@@ -192,6 +194,7 @@ export default function SettlementsPage() {
             orders: [],
             items: [],
             subtotal: 0,
+            taxableAmount: 0,
             cgst: 0,
             sgst: 0,
             serviceCharge: 0,
@@ -210,6 +213,7 @@ export default function SettlementsPage() {
         group.orders.push(o);
         group.items.push(...(o.items || []));
         group.subtotal += Number(o.subtotal || 0);
+        group.taxableAmount += Number((o as any).taxableAmount || o.subtotal || 0);
         group.cgst += Number(o.cgst || 0);
         group.sgst += Number(o.sgst || 0);
         group.serviceCharge += Number(o.serviceCharge || 0);
@@ -957,20 +961,15 @@ export default function SettlementsPage() {
 
               {/* Financial calculations summary */}
               {(() => {
-                const isFinalizedMatchingBill =
-                  activeBill &&
-                  activeBill.status === 'FINALIZED' &&
-                  Math.abs(Number(activeBill.grandTotal) - Number(selectedOrder.grandTotal)) < 0.01;
-
                 const ordAny = selectedOrder as any;
-                const displaySubtotal = isFinalizedMatchingBill ? activeBill.subtotal : selectedOrder.subtotal;
-                const displayTaxableAmount = isFinalizedMatchingBill ? activeBill.taxableAmount : (ordAny.taxableAmount || selectedOrder.subtotal);
-                const displayCGST = isFinalizedMatchingBill ? activeBill.cgst : (ordAny.cgst || 0);
-                const displaySGST = isFinalizedMatchingBill ? activeBill.sgst : (ordAny.sgst || 0);
-                const displayServiceCharge = isFinalizedMatchingBill ? activeBill.serviceCharge : (ordAny.serviceCharge || 0);
-                const displayNightCharge = isFinalizedMatchingBill ? activeBill.nightCharge : (ordAny.nightCharge || 0);
-                const displayRoundOff = isFinalizedMatchingBill ? activeBill.roundOff : (ordAny.roundOff || 0);
-                const displayGrandTotal = isFinalizedMatchingBill ? activeBill.grandTotal : selectedOrder.grandTotal;
+                const displaySubtotal = selectedOrder.subtotal;
+                const displayTaxableAmount = ordAny.taxableAmount || selectedOrder.subtotal;
+                const displayCGST = ordAny.cgst || 0;
+                const displaySGST = ordAny.sgst || 0;
+                const displayServiceCharge = ordAny.serviceCharge || 0;
+                const displayNightCharge = ordAny.nightCharge || 0;
+                const displayRoundOff = ordAny.roundOff || 0;
+                const displayGrandTotal = selectedOrder.grandTotal;
 
                 const displayCouponDiscount = activeBill?.couponDiscount || (selectedOrder as any).couponDiscount || 0;
                 const displayLoyaltyDiscount = (activeBill as any)?.loyaltyDiscount || 0;

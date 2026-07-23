@@ -436,17 +436,35 @@ export class OrdersService {
         orderBy: { createdAt: 'desc' },
       });
 
+      const mergedSubtotal = mergedItems.reduce(
+        (sum, item) => sum + Number(item.totalPrice || 0),
+        0,
+      );
+
+      const settings = await this.prisma.restaurantSettings.findUnique({
+        where: { id: 'default' },
+      });
+
+      if (settings) {
+        const mergedCalc = this.calcService.calculate({
+          subtotal: mergedSubtotal,
+          manualDiscount: 0,
+          settings,
+        });
+
+        order.subtotal = mergedCalc.subtotal as any;
+        order.discount = mergedCalc.discount as any;
+        order.couponDiscount = mergedCalc.couponDiscount as any;
+        order.taxableAmount = mergedCalc.taxableAmount as any;
+        order.cgst = mergedCalc.cgst as any;
+        order.sgst = mergedCalc.sgst as any;
+        order.serviceCharge = mergedCalc.serviceCharge as any;
+        order.nightCharge = mergedCalc.nightCharge as any;
+        order.roundOff = mergedCalc.roundOff as any;
+        order.grandTotal = mergedCalc.grandTotal as any;
+      }
+
       if (activeBill) {
-        order.subtotal = activeBill.subtotal;
-        order.discount = activeBill.discount;
-        order.couponDiscount = activeBill.couponDiscount;
-        order.taxableAmount = activeBill.taxableAmount;
-        order.cgst = activeBill.cgst;
-        order.sgst = activeBill.sgst;
-        order.serviceCharge = activeBill.serviceCharge;
-        order.nightCharge = activeBill.nightCharge;
-        order.roundOff = activeBill.roundOff;
-        order.grandTotal = activeBill.grandTotal;
         (order as any).bills = [activeBill];
       }
     }
