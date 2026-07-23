@@ -263,22 +263,19 @@ export class PaymentsService {
             );
           }
 
-          let calculatedDueDate: Date | null = null;
+          let calculatedDueDate: Date = new Date();
           const creditType = dto.creditType || 'UNTIL_PAY';
           if (creditType === 'WEEKLY') {
-            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 7);
           } else if (creditType === 'FIFTEEN_DAYS') {
-            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 15);
           } else if (creditType === 'MONTHLY') {
-            calculatedDueDate = new Date();
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
-          } else if (creditType === 'CUSTOM') {
-            calculatedDueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+          } else if (creditType === 'CUSTOM' && dto.dueDate) {
+            calculatedDueDate = new Date(dto.dueDate);
           } else {
-            // UNTIL_PAY: No fixed due date required
-            calculatedDueDate = null;
+            // UNTIL_PAY or fallback: Default to 30 days to satisfy MySQL NOT NULL constraint
+            calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
           }
 
           const targetInvoiceNumber = bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`;
