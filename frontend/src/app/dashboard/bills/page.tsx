@@ -221,8 +221,20 @@ export default function SettlementsPage() {
         group.roundOff += Number(o.roundOff || 0);
         group.grandTotal += Number(o.grandTotal || 0);
 
-        if (o.bills) group.bills.push(...o.bills);
-        if (o.payments) group.payments.push(...o.payments);
+        if (o.bills) {
+          for (const b of o.bills) {
+            if (!group.bills.some((eb) => eb.id === b.id)) {
+              group.bills.push(b);
+            }
+          }
+        }
+        if (o.payments) {
+          for (const p of o.payments) {
+            if (!group.payments.some((ep) => ep.id === p.id)) {
+              group.payments.push(p);
+            }
+          }
+        }
       } else {
         standalone.push(o);
       }

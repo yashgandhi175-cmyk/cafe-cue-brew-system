@@ -184,7 +184,8 @@ export class CreditsService {
     const availableCredit = Math.max(0, creditLimit - totalOutstanding);
 
     const invoices = customer.creditLedgers.map((l) => {
-      const paidAmount = Number(l.billAmount) - Number(l.outstandingAmount);
+      const creditPaymentsSum = (l.payments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+      const paidAmount = creditPaymentsSum;
       const isOverdue = l.dueDate ? now > new Date(l.dueDate) && l.settlementStatus !== 'PAID' : false;
       let daysOverdue = 0;
       if (isOverdue && l.dueDate) {

@@ -88,8 +88,8 @@ async function bootstrap() {
     }),
   );
 
-  // Set global prefix for all API controllers
-  app.setGlobalPrefix('api');
+  // Enable shutdown hooks for graceful exit and database pool disconnect
+  app.enableShutdownHooks();
 
   const port = process.env.PORT || 3000;
   console.log(`[BOOTSTRAP STEP 6/6] Binding server listener to 0.0.0.0:${port}...`);
