@@ -29,14 +29,16 @@ export class CreditsController {
     @CurrentUser() staff: { id: string },
     @Body()
     dto: {
-      ledgerId: string;
+      customerId?: string;
+      ledgerId?: string;
       amount: number;
       method: PaymentMethod;
       reference?: string;
     },
   ) {
     return this.creditsService.recordCreditPayment(
-      dto.ledgerId,
+      dto.customerId || null,
+      dto.ledgerId || null,
       dto.amount,
       dto.method,
       dto.reference || null,

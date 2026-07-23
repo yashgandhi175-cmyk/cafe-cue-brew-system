@@ -6,7 +6,7 @@ import { SettlementStatus, CreditType, PaymentMethod } from '@prisma/client';
 export class CreditsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // 1. Get Summary of Customer Credits (for report table)
+  // 1. Get Summary of Customer Credits (List Customers First)
   async getCreditsSummary(search?: string) {
     const whereClause: any = {};
     if (search) {
@@ -20,32 +20,51 @@ export class CreditsService {
       where: whereClause,
       include: {
         creditLedgers: {
-          where: {
-            settlementStatus: { in: ['UNPAID', 'PARTIAL'] },
+          include: {
+            payments: {
+              orderBy: { paidAt: 'desc' },
+              take: 1,
+            },
           },
         },
       },
+      orderBy: { name: 'asc' },
     });
 
     const now = new Date();
 
     return customers
       .map((customer) => {
-        const activeLedgers = customer.creditLedgers;
-        if (activeLedgers.length === 0) return null;
+        const ledgers = customer.creditLedgers;
+        const activeLedgers = ledgers.filter((l) => l.settlementStatus !== 'PAID');
+        if (ledgers.length === 0) return null;
 
         const outstandingAmount = activeLedgers.reduce(
           (sum, ledger) => sum + Number(ledger.outstandingAmount),
           0,
         );
 
+        let overdueAmount = 0;
         let maxOverdueDays = 0;
+
         activeLedgers.forEach((ledger) => {
           if (ledger.dueDate && ledger.dueDate < now) {
             const diffTime = Math.abs(now.getTime() - ledger.dueDate.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            overdueAmount += Number(ledger.outstandingAmount);
             if (diffDays > maxOverdueDays) {
               maxOverdueDays = diffDays;
+            }
+          }
+        });
+
+        // Find last payment date across all ledgers
+        let lastPaymentDate: Date | null = null;
+        ledgers.forEach((l) => {
+          if (l.payments.length > 0) {
+            const pDate = l.payments[0].paidAt;
+            if (!lastPaymentDate || pDate > lastPaymentDate) {
+              lastPaymentDate = pDate;
             }
           }
         });
@@ -55,9 +74,11 @@ export class CreditsService {
           name: customer.name,
           phone: customer.phone,
           outstandingAmount,
-          invoiceCount: activeLedgers.length,
+          overdueAmount,
+          openInvoicesCount: activeLedgers.length,
           overdueDays: maxOverdueDays,
-          status: maxOverdueDays > 0 ? 'OVERDUE' : 'ACTIVE',
+          lastPaymentDate,
+          status: overdueAmount > 0 ? 'OVERDUE' : (outstandingAmount > 0 ? 'ACTIVE' : 'CLEARED'),
         };
       })
       .filter(Boolean);
@@ -79,7 +100,7 @@ export class CreditsService {
               orderBy: { paidAt: 'desc' },
             },
           },
-          orderBy: { invoiceDate: 'desc' },
+          orderBy: [{ dueDate: 'asc' }, { invoiceDate: 'desc' }],
         },
       },
     });
@@ -88,41 +109,82 @@ export class CreditsService {
       throw new NotFoundException('Customer not found');
     }
 
-    // Build timeline events
+    const now = new Date();
     const timeline: any[] = [];
     let totalOutstanding = 0;
+    let totalPaid = 0;
+    let overdueAmount = 0;
+    let oldestDueDate: Date | null = null;
+    let lastPaymentDate: Date | null = null;
+    let totalPeriodDays = 0;
+    let paidCount = 0;
 
     customer.creditLedgers.forEach((ledger) => {
-      totalOutstanding += Number(ledger.outstandingAmount);
+      const ledgerOutstanding = Number(ledger.outstandingAmount);
+      const ledgerBillAmount = Number(ledger.billAmount);
+      const ledgerPaid = ledgerBillAmount - ledgerOutstanding;
+
+      totalOutstanding += ledgerOutstanding;
+      totalPaid += ledgerPaid;
+
+      if (ledger.settlementStatus !== 'PAID') {
+        if (ledger.dueDate && ledger.dueDate < now) {
+          overdueAmount += ledgerOutstanding;
+        }
+        if (ledger.dueDate && (!oldestDueDate || ledger.dueDate < oldestDueDate)) {
+          oldestDueDate = ledger.dueDate;
+        }
+      }
 
       // Add invoice created event
       timeline.push({
         type: 'INVOICE_CREATED',
         date: ledger.invoiceDate,
         description: `Invoice ${ledger.invoiceNumber} created on Credit`,
-        amount: Number(ledger.billAmount),
-        outstanding: Number(ledger.outstandingAmount),
+        amount: ledgerBillAmount,
+        outstanding: ledgerOutstanding,
         meta: { ledgerId: ledger.id, invoiceNumber: ledger.invoiceNumber },
       });
 
       // Add payment events
       ledger.payments.forEach((payment) => {
+        const pDate = payment.paidAt;
+        if (!lastPaymentDate || pDate > lastPaymentDate) {
+          lastPaymentDate = pDate;
+        }
+
+        const diffTime = Math.abs(pDate.getTime() - ledger.invoiceDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        totalPeriodDays += diffDays;
+        paidCount++;
+
         timeline.push({
           type: 'PAYMENT_RECEIVED',
           date: payment.paidAt,
-          description: `Received payment of Rs. ${payment.amount} via ${payment.method} against ${ledger.invoiceNumber}`,
+          description: `Received payment of ₹${payment.amount} via ${payment.method} against ${ledger.invoiceNumber}`,
           amount: Number(payment.amount),
-          receivedBy: payment.receivedBy.name,
+          receivedBy: payment.receivedBy?.name || 'Staff',
           meta: { paymentId: payment.id, ledgerId: ledger.id, invoiceNumber: ledger.invoiceNumber },
         });
       });
     });
 
-    // Sort timeline chronologically (latest first)
     timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const openInvoicesCount = customer.creditLedgers.filter((l) => l.settlementStatus !== 'PAID').length;
+    const averageCollectionDays = paidCount > 0 ? Math.round(totalPeriodDays / paidCount) : 0;
+    const creditLimit = 50000;
+    const availableCredit = Math.max(0, creditLimit - totalOutstanding);
 
     const invoices = customer.creditLedgers.map((l) => {
       const paidAmount = Number(l.billAmount) - Number(l.outstandingAmount);
+      const isOverdue = l.dueDate ? now > new Date(l.dueDate) && l.settlementStatus !== 'PAID' : false;
+      let daysOverdue = 0;
+      if (isOverdue && l.dueDate) {
+        const diffTime = Math.abs(now.getTime() - new Date(l.dueDate).getTime());
+        daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      }
+
       return {
         id: l.id,
         invoiceNumber: l.invoiceNumber,
@@ -132,9 +194,10 @@ export class CreditsService {
         outstandingAmount: Number(l.outstandingAmount),
         dueDate: l.dueDate,
         creditType: l.creditType,
-        settlementStatus: l.settlementStatus,
+        settlementStatus: isOverdue ? 'OVERDUE' : l.settlementStatus,
         notes: l.notes,
-        overdue: l.dueDate ? new Date() > new Date(l.dueDate) && l.settlementStatus !== 'PAID' : false,
+        overdue: isOverdue,
+        daysOverdue,
       };
     });
 
@@ -144,16 +207,25 @@ export class CreditsService {
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
+        creditLimit,
+        availableCredit,
         totalOutstanding,
+        totalPaid,
+        openInvoicesCount,
+        overdueAmount,
+        oldestDueDate,
+        averageCollectionDays,
+        lastPaymentDate,
       },
       invoices,
       timeline,
     };
   }
 
-  // 3. Receive Credit Payment (settle fully or partially)
+  // 3. Receive Credit Payment (Supports TOTAL_PAY FIFO distribution or single invoice payment)
   async recordCreditPayment(
-    ledgerId: string,
+    customerId: string | null,
+    ledgerId: string | null,
     amount: number,
     method: PaymentMethod,
     reference: string | null,
@@ -164,70 +236,206 @@ export class CreditsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const ledger = await tx.creditLedger.findUnique({
-        where: { id: ledgerId },
+      // MODE A: Specific Ledger ID (and NOT TOTAL_PAY)
+      if (ledgerId && ledgerId !== 'TOTAL_PAY') {
+        const ledger = await tx.creditLedger.findUnique({
+          where: { id: ledgerId },
+        });
+
+        if (!ledger) {
+          throw new NotFoundException('Credit ledger entry not found.');
+        }
+
+        const outstanding = Number(ledger.outstandingAmount);
+        if (outstanding <= 0) {
+          throw new BadRequestException('This invoice has already been fully paid.');
+        }
+
+        if (amount > outstanding) {
+          throw new BadRequestException(
+            `Payment amount (₹${amount}) cannot exceed outstanding balance of ₹${outstanding}.`,
+          );
+        }
+
+        const newOutstanding = Math.max(0, outstanding - amount);
+        const nextStatus: SettlementStatus = newOutstanding === 0 ? 'PAID' : 'PARTIAL';
+
+        const payment = await tx.creditPayment.create({
+          data: {
+            creditLedgerId: ledger.id,
+            amount,
+            method,
+            reference,
+            receivedById: staffId,
+          },
+        });
+
+        await tx.creditLedger.update({
+          where: { id: ledger.id },
+          data: {
+            outstandingAmount: newOutstanding,
+            settlementStatus: nextStatus,
+            updatedById: staffId,
+          },
+        });
+
+        // Sync to Bill & Order
+        const bill = await tx.bill.findUnique({
+          where: { invoiceNumber: ledger.invoiceNumber },
+        });
+        if (bill) {
+          await tx.bill.update({
+            where: { id: bill.id },
+            data: {
+              paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              status: nextStatus === 'PAID' ? 'PAID' : 'FINALIZED',
+            },
+          });
+          if (bill.tableSessionId) {
+            await tx.order.updateMany({
+              where: { tableSessionId: bill.tableSessionId },
+              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+            });
+          } else if (bill.orderId) {
+            await tx.order.update({
+              where: { id: bill.orderId },
+              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+            });
+          }
+        }
+
+        await tx.auditLog.create({
+          data: {
+            staffId,
+            action: 'CREDIT_PAYMENT_RECEIVE',
+            entityType: 'CreditPayment',
+            entityId: payment.id,
+            newData: JSON.stringify({
+              ledgerId: ledger.id,
+              amount,
+              method,
+              newOutstanding,
+              status: nextStatus,
+            }),
+          },
+        });
+
+        return [payment];
+      }
+
+      // MODE B: Total Pay (FIFO Distribution across customer's open invoices)
+      let targetCustomerId = customerId;
+      if (!targetCustomerId && ledgerId) {
+        const singleL = await tx.creditLedger.findUnique({ where: { id: ledgerId } });
+        if (singleL) targetCustomerId = singleL.customerId;
+      }
+
+      if (!targetCustomerId) {
+        throw new BadRequestException('Customer ID is required to process total payment.');
+      }
+
+      const activeLedgers = await tx.creditLedger.findMany({
+        where: {
+          customerId: targetCustomerId,
+          settlementStatus: { in: ['UNPAID', 'PARTIAL'] },
+        },
+        orderBy: [
+          { dueDate: 'asc' },
+          { invoiceDate: 'asc' },
+        ],
       });
 
-      if (!ledger) {
-        throw new NotFoundException('Credit ledger entry not found.');
+      if (activeLedgers.length === 0) {
+        throw new BadRequestException('This customer has no outstanding credit invoices.');
       }
 
-      const outstanding = Number(ledger.outstandingAmount);
-      if (outstanding <= 0) {
-        throw new BadRequestException('This invoice has already been fully paid.');
-      }
+      const totalCustomerOutstanding = activeLedgers.reduce(
+        (sum, l) => sum + Number(l.outstandingAmount),
+        0,
+      );
 
-      if (amount > outstanding) {
+      if (amount > totalCustomerOutstanding) {
         throw new BadRequestException(
-          `Payment amount (Rs. ${amount}) cannot exceed outstanding balance of Rs. ${outstanding}.`,
+          `Payment amount (₹${amount}) cannot exceed total customer outstanding balance of ₹${totalCustomerOutstanding}.`,
         );
       }
 
-      const newOutstanding = outstanding - amount;
-      let nextStatus: SettlementStatus = 'PARTIAL';
-      if (newOutstanding === 0) {
-        nextStatus = 'PAID';
+      let remainingToAllocate = amount;
+      const createdPayments: any[] = [];
+
+      for (const ledger of activeLedgers) {
+        if (remainingToAllocate <= 0) break;
+
+        const ledgerOutstanding = Number(ledger.outstandingAmount);
+        const allocateAmount = Math.min(remainingToAllocate, ledgerOutstanding);
+        const newOutstanding = Math.max(0, ledgerOutstanding - allocateAmount);
+        const nextStatus: SettlementStatus = newOutstanding === 0 ? 'PAID' : 'PARTIAL';
+
+        const payment = await tx.creditPayment.create({
+          data: {
+            creditLedgerId: ledger.id,
+            amount: allocateAmount,
+            method,
+            reference,
+            receivedById: staffId,
+          },
+        });
+        createdPayments.push(payment);
+
+        await tx.creditLedger.update({
+          where: { id: ledger.id },
+          data: {
+            outstandingAmount: newOutstanding,
+            settlementStatus: nextStatus,
+            updatedById: staffId,
+          },
+        });
+
+        // Sync to Bill & Order
+        const bill = await tx.bill.findUnique({
+          where: { invoiceNumber: ledger.invoiceNumber },
+        });
+        if (bill) {
+          await tx.bill.update({
+            where: { id: bill.id },
+            data: {
+              paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              status: nextStatus === 'PAID' ? 'PAID' : 'FINALIZED',
+            },
+          });
+          if (bill.tableSessionId) {
+            await tx.order.updateMany({
+              where: { tableSessionId: bill.tableSessionId },
+              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+            });
+          } else if (bill.orderId) {
+            await tx.order.update({
+              where: { id: bill.orderId },
+              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+            });
+          }
+        }
+
+        await tx.auditLog.create({
+          data: {
+            staffId,
+            action: 'CREDIT_PAYMENT_RECEIVE',
+            entityType: 'CreditPayment',
+            entityId: payment.id,
+            newData: JSON.stringify({
+              ledgerId: ledger.id,
+              amount: allocateAmount,
+              method,
+              newOutstanding,
+              status: nextStatus,
+            }),
+          },
+        });
+
+        remainingToAllocate -= allocateAmount;
       }
 
-      // 1. Create CreditPayment record
-      const payment = await tx.creditPayment.create({
-        data: {
-          creditLedgerId: ledger.id,
-          amount,
-          method,
-          reference,
-          receivedById: staffId,
-        },
-      });
-
-      // 2. Update CreditLedger
-      await tx.creditLedger.update({
-        where: { id: ledger.id },
-        data: {
-          outstandingAmount: newOutstanding,
-          settlementStatus: nextStatus,
-          updatedById: staffId,
-        },
-      });
-
-      // 3. Write to Audit Log
-      await tx.auditLog.create({
-        data: {
-          staffId,
-          action: 'CREDIT_PAYMENT_RECEIVE',
-          entityType: 'CreditPayment',
-          entityId: payment.id,
-          newData: JSON.stringify({
-            ledgerId,
-            amount,
-            method,
-            newOutstanding,
-            status: nextStatus,
-          }),
-        },
-      });
-
-      return payment;
+      return createdPayments;
     });
   }
 

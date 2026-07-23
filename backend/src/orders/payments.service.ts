@@ -264,17 +264,15 @@ export class PaymentsService {
           }
 
           let calculatedDueDate: Date = new Date();
-          const creditType = dto.creditType || 'UNTIL_PAY';
+          const creditType = (dto.creditType as any) || 'MONTHLY';
           if (creditType === 'WEEKLY') {
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 7);
           } else if (creditType === 'FIFTEEN_DAYS') {
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 15);
-          } else if (creditType === 'MONTHLY') {
-            calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
           } else if (creditType === 'CUSTOM' && dto.dueDate) {
             calculatedDueDate = new Date(dto.dueDate);
           } else {
-            // UNTIL_PAY or fallback: Default to 30 days to satisfy MySQL NOT NULL constraint
+            // MONTHLY (DEFAULT): Today + 30 days
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
           }
 

@@ -14,10 +14,14 @@ import {
   CreditCard,
   User,
   Phone,
-  ArrowLeftRight,
   Plus,
   Loader2,
   CheckCircle,
+  Clock,
+  ShieldCheck,
+  Star,
+  Receipt,
+  ArrowRight,
 } from 'lucide-react';
 import { fetchWithAuth } from '@/lib/api';
 
@@ -28,9 +32,11 @@ interface CreditSummary {
   name: string;
   phone: string;
   outstandingAmount: number;
-  invoiceCount: number;
+  overdueAmount: number;
+  openInvoicesCount: number;
   overdueDays: number;
-  status: 'OVERDUE' | 'ACTIVE';
+  lastPaymentDate: string | null;
+  status: 'OVERDUE' | 'ACTIVE' | 'CLEARED';
 }
 
 interface CreditInvoice {
@@ -42,9 +48,10 @@ interface CreditInvoice {
   outstandingAmount: number;
   dueDate: string | null;
   creditType: string;
-  settlementStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+  settlementStatus: 'UNPAID' | 'PARTIAL' | 'PAID' | 'OVERDUE';
   notes: string | null;
   overdue: boolean;
+  daysOverdue: number;
 }
 
 interface TimelineEvent {
@@ -66,7 +73,15 @@ interface CreditDetails {
     name: string;
     phone: string;
     email: string | null;
+    creditLimit: number;
+    availableCredit: number;
     totalOutstanding: number;
+    totalPaid: number;
+    openInvoicesCount: number;
+    overdueAmount: number;
+    oldestDueDate: string | null;
+    averageCollectionDays: number;
+    lastPaymentDate: string | null;
   };
   invoices: CreditInvoice[];
   timeline: TimelineEvent[];
@@ -91,15 +106,15 @@ export default function CreditLedgerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Drawer States
+  // Drawer / Details States
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [details, setDetails] = useState<CreditDetails | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
 
   // Settlement Form States
-  const [selectedLedgerId, setSelectedLedgerId] = useState<string>('');
+  const [selectedLedgerId, setSelectedLedgerId] = useState<string>('TOTAL_PAY');
   const [settleAmount, setSettleAmount] = useState<number>(0);
-  const [settleMethod, setSettleMethod] = useState<'CASH' | 'UPI' | 'CARD'>('CASH');
+  const [settleMethod, setSettleMethod] = useState<'CASH' | 'UPI' | 'CARD' | 'CHEQUE'>('CASH');
   const [settleRef, setSettleRef] = useState('');
   const [settleLoading, setSettleLoading] = useState(false);
   const [settleError, setSettleError] = useState<string | null>(null);
@@ -109,17 +124,15 @@ export default function CreditLedgerPage() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch summaries
       const summaryUrl = search
         ? `${API_URL}/credits/summary?search=${encodeURIComponent(search)}`
         : `${API_URL}/credits/summary`;
       
       const summaryRes = await fetchWithAuth(summaryUrl);
-      if (!summaryRes.ok) throw new Error('Failed to fetch credit summaries');
+      if (!summaryRes.ok) throw new Error('Failed to fetch customer credit summary');
       const summaryData = await summaryRes.json();
       setSummaries(summaryData);
 
-      // Fetch analytics
       const analyticsRes = await fetchWithAuth(`${API_URL}/credits/analytics`);
       if (!analyticsRes.ok) throw new Error('Failed to fetch credit analytics');
       const analyticsData = await analyticsRes.json();
@@ -141,15 +154,9 @@ export default function CreditLedgerPage() {
       const data = await res.json();
       setDetails(data);
 
-      // Set default invoice for settlement dropdown (first unpaid/partial invoice)
-      const unpaidInvoices = data.invoices.filter((i: any) => i.settlementStatus !== 'PAID');
-      if (unpaidInvoices.length > 0) {
-        setSelectedLedgerId(unpaidInvoices[0].id);
-        setSettleAmount(unpaidInvoices[0].outstandingAmount);
-      } else {
-        setSelectedLedgerId('');
-        setSettleAmount(0);
-      }
+      // Default settlement selection is ⭐ TOTAL PAY
+      setSelectedLedgerId('TOTAL_PAY');
+      setSettleAmount(data.customer.totalOutstanding);
     } catch (err: any) {
       setSettleError(err.message || 'Failed to load ledger details.');
     } finally {
@@ -161,28 +168,26 @@ export default function CreditLedgerPage() {
     fetchCreditsData();
   }, [search]);
 
-  // Handle drawer open
   const handleOpenLedger = (customerId: string) => {
     setSelectedCustomerId(customerId);
     fetchCustomerDetails(customerId);
   };
 
-  // Handle drawer close
   const handleCloseLedger = () => {
     setSelectedCustomerId(null);
     setDetails(null);
+    setSelectedLedgerId('TOTAL_PAY');
     setSettleAmount(0);
     setSettleRef('');
     setSettleError(null);
     setSettleSuccess(false);
   };
 
-  // Settle invoice submit
   const handleRecordSettlement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLedgerId) return;
+    if (!details || !selectedCustomerId) return;
     if (settleAmount <= 0) {
-      setSettleError('Amount must be greater than zero.');
+      setSettleError('Settlement amount must be greater than zero.');
       return;
     }
 
@@ -191,29 +196,37 @@ export default function CreditLedgerPage() {
     setSettleSuccess(false);
 
     try {
+      const payload: any = {
+        customerId: selectedCustomerId,
+        amount: Number(settleAmount),
+        method: settleMethod,
+        reference: settleRef.trim() || undefined,
+      };
+
+      if (selectedLedgerId && selectedLedgerId !== 'TOTAL_PAY') {
+        payload.ledgerId = selectedLedgerId;
+      } else {
+        payload.ledgerId = 'TOTAL_PAY';
+      }
+
       const res = await fetchWithAuth(`${API_URL}/credits/payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ledgerId: selectedLedgerId,
-          amount: Number(settleAmount),
-          method: settleMethod,
-          reference: settleRef.trim() || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Failed to process payment');
+      if (!res.ok) throw new Error(data.message || 'Failed to process credit settlement.');
 
       setSettleSuccess(true);
       setSettleRef('');
-      // Reload drawer details and main board summary
+      
       if (selectedCustomerId) {
-        fetchCustomerDetails(selectedCustomerId);
+        await fetchCustomerDetails(selectedCustomerId);
       }
-      fetchCreditsData();
+      await fetchCreditsData();
     } catch (err: any) {
       setSettleError(err.message || 'Failed to record settlement.');
     } finally {
@@ -221,11 +234,14 @@ export default function CreditLedgerPage() {
     }
   };
 
-  // Handle select invoice in settlement form to automatically update amount input
-  const handleInvoiceSelectChange = (ledgerId: string) => {
-    setSelectedLedgerId(ledgerId);
-    if (details) {
-      const inv = details.invoices.find((i) => i.id === ledgerId);
+  const handleInvoiceSelectChange = (targetId: string) => {
+    setSelectedLedgerId(targetId);
+    if (!details) return;
+
+    if (targetId === 'TOTAL_PAY') {
+      setSettleAmount(details.customer.totalOutstanding);
+    } else {
+      const inv = details.invoices.find((i) => i.id === targetId);
       if (inv) {
         setSettleAmount(inv.outstandingAmount);
       }
@@ -239,18 +255,18 @@ export default function CreditLedgerPage() {
         <div className="absolute -right-10 -bottom-10 w-40 h-40 rounded-full bg-[#EAD8C0]/10 blur-2xl"></div>
         <div className="relative z-10 space-y-3">
           <span className="text-xs uppercase tracking-widest bg-white/20 px-3 py-1 rounded-full font-bold">
-            Finances Hub
+            Accounting Console
           </span>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
             Customer Credit Ledger
           </h1>
           <p className="text-sm md:text-base text-[#DDBEAA] max-w-xl font-light">
-            Manage company credit details, track invoice aging periods, analyze collections efficiency, and log customer invoice settlements.
+            Track customer credit balances, manage open invoices, execute FIFO collection settlements, and analyze receivables aging.
           </p>
         </div>
       </div>
 
-      {/* Analytics Dashboard Grid */}
+      {/* Analytics Executive Dashboard Grid */}
       {analytics && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Metric 1 */}
@@ -292,9 +308,9 @@ export default function CreditLedgerPage() {
           {/* Metric 4 */}
           <div className="bg-white border border-[#EAD8C0]/20 p-6 rounded-2xl shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-xs text-gray-400 font-bold uppercase tracking-wider block">Overdue Invoices</span>
-              <span className="text-2xl font-black text-orange-600 block">{analytics.overdueCustomers} Accounts</span>
-              <span className="text-[10px] text-gray-400 font-medium">Avg Collection Period: {analytics.averageCreditPeriod} Days</span>
+              <span className="text-xs text-gray-400 font-bold uppercase tracking-wider block">Overdue Accounts</span>
+              <span className="text-2xl font-black text-orange-600 block">{analytics.overdueCustomers} Customers</span>
+              <span className="text-[10px] text-gray-400 font-medium">Avg Collection: {analytics.averageCreditPeriod} Days</span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center text-orange-600">
               <Calendar className="h-6 w-6" />
@@ -303,20 +319,20 @@ export default function CreditLedgerPage() {
         </div>
       )}
 
-      {/* Main Ledger Table Console */}
+      {/* Customer Directory Table */}
       <div className="bg-white rounded-2xl border border-[#EAD8C0]/20 shadow-sm overflow-hidden">
-        {/* Table Toolbar */}
+        {/* Toolbar */}
         <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-[#FAF8F5]/30">
           <div>
-            <h2 className="text-lg font-bold text-gray-800">Accounts Receivable Summary</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Timelines, collections, and settlement records</p>
+            <h2 className="text-lg font-bold text-gray-800">Customer Credit Directory</h2>
+            <p className="text-xs text-gray-400 mt-0.5">List of customers with active credit accounts and balances</p>
           </div>
 
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search by customer name/phone..."
+              placeholder="Search by customer name or phone..."
               className="w-full pl-10 pr-4 py-2 text-xs border border-[#EAD8C0] focus:border-[#8F6A50] focus:outline-none rounded-xl bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -324,25 +340,26 @@ export default function CreditLedgerPage() {
           </div>
         </div>
 
-        {/* Table Content */}
+        {/* Table List */}
         {loading ? (
           <div className="p-20 flex flex-col items-center justify-center">
             <Loader2 className="w-10 h-10 text-[#8F6A50] animate-spin mb-4" />
-            <span className="text-gray-400 text-xs font-bold font-mono">Loading Credit Registry...</span>
+            <span className="text-gray-400 text-xs font-bold font-mono">Loading Credit Directory...</span>
           </div>
         ) : error ? (
           <div className="p-20 text-center text-red-500 font-semibold text-sm">{error}</div>
         ) : summaries.length === 0 ? (
-          <div className="p-20 text-center text-gray-400 text-xs font-semibold">No active credit ledger records found.</div>
+          <div className="p-20 text-center text-gray-400 text-xs font-semibold">No customer credit accounts found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-stone-50 text-stone-400 font-extrabold uppercase border-b border-gray-100">
                   <th className="py-4 px-6">Customer Profile</th>
-                  <th className="py-4 px-6 text-right">Invoices count</th>
-                  <th className="py-4 px-6 text-right">Total Outstanding</th>
-                  <th className="py-4 px-6 text-center">Overdue Days</th>
+                  <th className="py-4 px-6 text-right">Outstanding Balance</th>
+                  <th className="py-4 px-6 text-center">Open Invoices</th>
+                  <th className="py-4 px-6 text-right">Overdue Amount</th>
+                  <th className="py-4 px-6 text-center">Last Payment</th>
                   <th className="py-4 px-6 text-center">Status</th>
                   <th className="py-4 px-6 text-center">Action</th>
                 </tr>
@@ -359,19 +376,28 @@ export default function CreditLedgerPage() {
                         <p className="text-[10px] text-gray-400 mt-0.5">{s.phone}</p>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-right text-gray-600 font-black">{s.invoiceCount}</td>
-                    <td className="py-4 px-6 text-right text-gray-800 font-black">₹{s.outstandingAmount.toLocaleString('en-IN')}</td>
-                    <td className="py-4 px-6 text-center font-mono">
-                      {s.overdueDays > 0 ? (
-                        <span className="text-red-600 font-black">{s.overdueDays} Days</span>
+                    <td className="py-4 px-6 text-right text-red-600 font-black text-sm">
+                      ₹{s.outstandingAmount.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-4 px-6 text-center font-black text-gray-700">
+                      {s.openInvoicesCount}
+                    </td>
+                    <td className="py-4 px-6 text-right font-mono font-bold">
+                      {s.overdueAmount > 0 ? (
+                        <span className="text-red-600 font-black">₹{s.overdueAmount.toLocaleString('en-IN')}</span>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400">₹0.00</span>
                       )}
+                    </td>
+                    <td className="py-4 px-6 text-center text-gray-500 font-medium">
+                      {s.lastPaymentDate ? new Date(s.lastPaymentDate).toLocaleDateString() : 'No Payments'}
                     </td>
                     <td className="py-4 px-6 text-center">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-wide uppercase ${
                         s.status === 'OVERDUE'
                           ? 'bg-red-50 text-red-600 border border-red-200'
+                          : s.status === 'ACTIVE'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
                           : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                       }`}>
                         {s.status}
@@ -394,11 +420,10 @@ export default function CreditLedgerPage() {
         )}
       </div>
 
-      {/* Slide-out Drawer Panel overlay */}
+      {/* Customer Ledger Details Drawer Overlay */}
       {selectedCustomerId && (
         <div className="fixed inset-0 bg-[#3C2A21]/30 backdrop-blur-xs z-50 flex justify-end">
-          {/* Drawer Body Container */}
-          <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden relative animate-slide-in">
+          <div className="w-full max-w-3xl bg-white h-full shadow-2xl flex flex-col justify-between overflow-hidden relative animate-slide-in">
             
             {/* Drawer Header */}
             <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-[#3C2A21] text-white">
@@ -409,7 +434,7 @@ export default function CreditLedgerPage() {
                 <div>
                   <h3 className="font-extrabold text-base">Customer Ledger Details</h3>
                   <p className="text-[10px] text-[#DDBEAA] mt-0.5 font-bold uppercase tracking-wider">
-                    Timeline & payments breakdown
+                    Accounting breakdown & multi-invoice settlement
                   </p>
                 </div>
               </div>
@@ -421,63 +446,106 @@ export default function CreditLedgerPage() {
               </button>
             </div>
 
-            {/* Drawer Body Scroll Container */}
+            {/* Drawer Scroll Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#FAF8F5]/30">
               {drawerLoading ? (
                 <div className="py-20 flex flex-col items-center justify-center">
                   <Loader2 className="w-8 h-8 text-[#3C2A21] animate-spin mb-4" />
-                  <span className="text-gray-400 text-xs font-bold font-mono">Loading credit history...</span>
+                  <span className="text-gray-400 text-xs font-bold font-mono">Loading customer ledger...</span>
                 </div>
               ) : details ? (
                 <>
-                  {/* Customer Information Panel */}
-                  <div className="bg-white border border-[#EAD8C0]/20 p-5 rounded-2xl shadow-xs grid grid-cols-3 gap-4">
-                    <div className="flex items-start gap-2.5">
-                      <User className="w-4.5 h-4.5 text-amber-800 shrink-0 mt-0.5" />
+                  {/* Top Customer Summary Card */}
+                  <div className="bg-white border border-[#EAD8C0]/30 p-6 rounded-2xl shadow-sm space-y-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-gray-100">
                       <div>
-                        <span className="text-[10px] text-gray-400 block font-extrabold uppercase">Customer</span>
-                        <span className="font-extrabold text-sm text-gray-800">{details.customer.name}</span>
+                        <h4 className="text-lg font-black text-gray-800">{details.customer.name}</h4>
+                        <p className="text-xs text-gray-400 font-bold">{details.customer.phone} {details.customer.email && `• ${details.customer.email}`}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] text-gray-400 font-extrabold uppercase block">Credit Status</span>
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          details.customer.overdueAmount > 0
+                            ? 'bg-red-50 text-red-600 border border-red-200'
+                            : details.customer.totalOutstanding > 0
+                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                        }`}>
+                          {details.customer.overdueAmount > 0 ? 'OVERDUE' : details.customer.totalOutstanding > 0 ? 'ACTIVE' : 'CLEARED'}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2.5">
-                      <Phone className="w-4.5 h-4.5 text-amber-800 shrink-0 mt-0.5" />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                       <div>
-                        <span className="text-[10px] text-gray-400 block font-extrabold uppercase">Phone Number</span>
-                        <span className="font-extrabold text-xs text-gray-800">{details.customer.phone}</span>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Credit Limit</span>
+                        <span className="font-extrabold text-gray-800">₹{details.customer.creditLimit.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Available Credit</span>
+                        <span className="font-extrabold text-emerald-700">₹{details.customer.availableCredit.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Outstanding</span>
+                        <span className="font-black text-red-600 text-sm">₹{details.customer.totalOutstanding.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Paid</span>
+                        <span className="font-extrabold text-gray-800">₹{details.customer.totalPaid.toLocaleString('en-IN')}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-2.5">
-                      <DollarSign className="w-4.5 h-4.5 text-amber-800 shrink-0 mt-0.5" />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs pt-3 border-t border-gray-100">
                       <div>
-                        <span className="text-[10px] text-gray-400 block font-extrabold uppercase">Total Outstanding</span>
-                        <span className="font-black text-sm text-red-600">₹{details.customer.totalOutstanding.toLocaleString('en-IN')}</span>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Open Invoices</span>
+                        <span className="font-extrabold text-gray-800">{details.customer.openInvoicesCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Overdue Amount</span>
+                        <span className="font-extrabold text-red-600">₹{details.customer.overdueAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Avg Collection</span>
+                        <span className="font-extrabold text-gray-800">{details.customer.averageCollectionDays} Days</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase block">Last Payment</span>
+                        <span className="font-extrabold text-gray-800">
+                          {details.customer.lastPaymentDate ? new Date(details.customer.lastPaymentDate).toLocaleDateString() : 'N/A'}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Settle Outstanding Invoice Form */}
+                  {/* Settle Credit Panel */}
                   {details.invoices.some((i) => i.settlementStatus !== 'PAID') && (
-                    <form onSubmit={handleRecordSettlement} className="bg-amber-50/50 border border-amber-200/60 p-5 rounded-2xl space-y-4">
-                      <h4 className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                        <Plus className="w-4 h-4" />
-                        <span>Settle Credit Invoice</span>
-                      </h4>
+                    <form onSubmit={handleRecordSettlement} className="bg-amber-50/60 border border-amber-200/80 p-6 rounded-2xl space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                          <Plus className="w-4 h-4" />
+                          <span>Settle Credit Panel</span>
+                        </h4>
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-200/50 px-2 py-0.5 rounded-full">
+                          Auto-FIFO Payment Distribution
+                        </span>
+                      </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                         <div>
-                          <label className="font-bold text-amber-900 block mb-1">Select Invoice</label>
+                          <label className="font-bold text-amber-900 block mb-1">Select Settlement</label>
                           <select
-                            className="w-full p-2 border border-amber-200 rounded-lg bg-white focus:outline-none font-bold text-gray-700"
+                            className="w-full p-2.5 border border-amber-300 rounded-xl bg-white focus:outline-none font-bold text-gray-800"
                             value={selectedLedgerId}
                             onChange={(e) => handleInvoiceSelectChange(e.target.value)}
                           >
+                            <option value="TOTAL_PAY">
+                              ⭐ Total Pay (₹{details.customer.totalOutstanding.toLocaleString('en-IN')} - DEFAULT)
+                            </option>
                             {details.invoices
                               .filter((i) => i.settlementStatus !== 'PAID')
                               .map((i) => (
                                 <option key={i.id} value={i.id}>
-                                  {i.invoiceNumber} (O/S: ₹{i.outstandingAmount})
+                                  Invoice {i.invoiceNumber} (Remaining: ₹{i.outstandingAmount})
                                 </option>
                               ))}
                           </select>
@@ -487,33 +555,35 @@ export default function CreditLedgerPage() {
                           <label className="font-bold text-amber-900 block mb-1">Settlement Amount (₹)</label>
                           <input
                             type="number"
-                            className="w-full p-2 border border-amber-200 rounded-lg focus:outline-none bg-white font-bold text-gray-700"
+                            step="0.01"
+                            className="w-full p-2.5 border border-amber-300 rounded-xl focus:outline-none bg-white font-black text-gray-800 text-sm"
                             value={settleAmount || ''}
                             onChange={(e) => setSettleAmount(Number(e.target.value))}
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                         <div>
-                          <label className="font-bold text-amber-900 block mb-1">Collection Method</label>
+                          <label className="font-bold text-amber-900 block mb-1">Payment Method</label>
                           <select
-                            className="w-full p-2 border border-amber-200 rounded-lg bg-white focus:outline-none font-bold text-gray-700"
+                            className="w-full p-2.5 border border-amber-300 rounded-xl bg-white focus:outline-none font-bold text-gray-800"
                             value={settleMethod}
                             onChange={(e) => setSettleMethod(e.target.value as any)}
                           >
                             <option value="CASH">CASH</option>
                             <option value="UPI">UPI / QR CODE</option>
                             <option value="CARD">CARD PAYMENT</option>
+                            <option value="CHEQUE">CHEQUE</option>
                           </select>
                         </div>
 
                         <div>
-                          <label className="font-bold text-amber-900 block mb-1">Reference / Txn Code</label>
+                          <label className="font-bold text-amber-900 block mb-1">Reference / Txn Code (Optional)</label>
                           <input
                             type="text"
-                            placeholder="Enter reference details..."
-                            className="w-full p-2 border border-amber-200 rounded-lg focus:outline-none bg-white text-gray-700 text-xs"
+                            placeholder="Cheque # / UTR / Reference..."
+                            className="w-full p-2.5 border border-amber-300 rounded-xl focus:outline-none bg-white text-gray-800 text-xs font-medium"
                             value={settleRef}
                             onChange={(e) => setSettleRef(e.target.value)}
                           />
@@ -521,70 +591,83 @@ export default function CreditLedgerPage() {
                       </div>
 
                       {settleError && (
-                        <p className="text-red-600 font-bold text-xs">{settleError}</p>
+                        <p className="text-red-600 font-bold text-xs bg-red-50 p-2.5 rounded-lg border border-red-200">{settleError}</p>
                       )}
 
                       {settleSuccess && (
-                        <p className="text-emerald-600 font-bold text-xs flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Collection payment recorded successfully!</span>
+                        <p className="text-emerald-700 font-bold text-xs flex items-center gap-1 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Credit settlement processed and distributed successfully!</span>
                         </p>
                       )}
 
                       <button
                         type="submit"
                         disabled={settleLoading}
-                        className="w-full bg-[#3C2A21] hover:bg-[#8F6A50] text-[#EAD8C0] py-2 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        className="w-full bg-[#3C2A21] hover:bg-[#8F6A50] text-[#EAD8C0] py-3 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         {settleLoading ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <>
-                            <CreditCard className="w-3.5 h-3.5" />
-                            <span>Confirm Collection Settle</span>
+                            <CreditCard className="w-4 h-4" />
+                            <span>Confirm & Record Collection</span>
                           </>
                         )}
                       </button>
                     </form>
                   )}
 
-                  {/* Active Invoices Table */}
-                  <div className="space-y-2.5">
-                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-gray-500">Invoice History</h4>
-                    <div className="bg-white border border-[#EAD8C0]/20 rounded-2xl overflow-hidden">
-                      <table className="w-full text-left text-[11px] border-collapse">
+                  {/* Outstanding Invoices Table */}
+                  <div className="space-y-3">
+                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-gray-500">Outstanding Invoices Table</h4>
+                    <div className="bg-white border border-[#EAD8C0]/30 rounded-2xl overflow-hidden shadow-xs">
+                      <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-stone-50 border-b border-stone-100 text-stone-400 font-bold uppercase">
-                            <th className="py-2.5 px-4">Invoice #</th>
-                            <th className="py-2.5 px-4 text-center">Due Date</th>
-                            <th className="py-2.5 px-4 text-right">Amount</th>
-                            <th className="py-2.5 px-4 text-right">Outstanding</th>
-                            <th className="py-2.5 px-4 text-center">Status</th>
+                          <tr className="bg-stone-50 border-b border-stone-100 text-stone-400 font-extrabold uppercase text-[10px]">
+                            <th className="py-3 px-4">Invoice #</th>
+                            <th className="py-3 px-4 text-center">Invoice Date</th>
+                            <th className="py-3 px-4 text-right">Bill Amount</th>
+                            <th className="py-3 px-4 text-right">Paid</th>
+                            <th className="py-3 px-4 text-right">Remaining</th>
+                            <th className="py-3 px-4 text-center">Due Date</th>
+                            <th className="py-3 px-4 text-center">Days Overdue</th>
+                            <th className="py-3 px-4 text-center">Status</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 font-bold text-gray-700">
                           {details.invoices.map((inv) => (
-                            <tr key={inv.id} className="hover:bg-amber-50/10">
-                              <td className="py-2.5 px-4">
-                                <p className="font-black text-gray-800">{inv.invoiceNumber}</p>
-                                <p className="text-[9px] text-gray-400 font-semibold">{new Date(inv.invoiceDate).toLocaleDateString()}</p>
+                            <tr key={inv.id} className="hover:bg-amber-50/20 transition-colors">
+                              <td className="py-3 px-4 font-extrabold text-gray-800">{inv.invoiceNumber}</td>
+                              <td className="py-3 px-4 text-center text-gray-500 text-[11px]">
+                                {new Date(inv.invoiceDate).toLocaleDateString()}
                               </td>
-                              <td className="py-2.5 px-4 text-center font-mono">
-                                <span className={inv.overdue ? 'text-red-600' : 'text-gray-500'}>
-                                  {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'Until Pay'}
+                              <td className="py-3 px-4 text-right">₹{inv.billAmount.toFixed(2)}</td>
+                              <td className="py-3 px-4 text-right text-emerald-600">₹{inv.paidAmount.toFixed(2)}</td>
+                              <td className="py-3 px-4 text-right font-black text-red-600">
+                                ₹{inv.outstandingAmount.toFixed(2)}
+                              </td>
+                              <td className="py-3 px-4 text-center font-mono text-[11px]">
+                                <span className={inv.overdue ? 'text-red-600 font-black' : 'text-gray-500'}>
+                                  {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : 'N/A'}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-4 text-right">₹{inv.billAmount}</td>
-                              <td className="py-2.5 px-4 text-right font-black text-gray-800">
-                                ₹{inv.outstandingAmount}
+                              <td className="py-3 px-4 text-center font-mono">
+                                {inv.daysOverdue > 0 ? (
+                                  <span className="text-red-600 font-black">{inv.daysOverdue} d</span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
                               </td>
-                              <td className="py-2.5 px-4 text-center">
-                                <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] uppercase ${
+                              <td className="py-3 px-4 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase ${
                                   inv.settlementStatus === 'PAID'
-                                    ? 'bg-emerald-50 text-emerald-600'
+                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                                    : inv.settlementStatus === 'OVERDUE' || inv.overdue
+                                    ? 'bg-red-50 text-red-600 border border-red-200'
                                     : inv.settlementStatus === 'PARTIAL'
-                                    ? 'bg-yellow-50 text-yellow-600'
-                                    : 'bg-red-50 text-red-600'
+                                    ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                                    : 'bg-amber-50 text-amber-800 border border-amber-200'
                                 }`}>
                                   {inv.settlementStatus}
                                 </span>
@@ -598,28 +681,27 @@ export default function CreditLedgerPage() {
 
                   {/* Chronological Timeline Feed */}
                   <div className="space-y-4">
-                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-gray-500">Timeline events</h4>
-                    <div className="relative pl-5 space-y-4 border-l border-stone-200">
+                    <h4 className="font-extrabold text-xs uppercase tracking-wider text-gray-500">Timeline & Activity Log</h4>
+                    <div className="relative pl-5 space-y-4 border-l-2 border-stone-200">
                       {details.timeline.map((event, idx) => (
                         <div key={idx} className="relative">
-                          {/* Dot */}
-                          <div className={`absolute -left-[25.5px] top-1.5 w-2 h-2 rounded-full ${
+                          <div className={`absolute -left-[25px] top-1.5 w-3 h-3 rounded-full border-2 border-white ${
                             event.type === 'INVOICE_CREATED' ? 'bg-red-500' : 'bg-emerald-500'
                           }`} />
                           
-                          <div className="bg-white border border-[#EAD8C0]/10 p-3.5 rounded-xl shadow-xs flex justify-between gap-4">
+                          <div className="bg-white border border-[#EAD8C0]/20 p-4 rounded-xl shadow-xs flex justify-between gap-4">
                             <div>
                               <p className="font-extrabold text-xs text-gray-800">{event.description}</p>
-                              <p className="text-[9px] text-gray-400 font-semibold mt-1">
+                              <p className="text-[10px] text-gray-400 font-semibold mt-1">
                                 {new Date(event.date).toLocaleString()}
-                                {event.receivedBy && ` • Settle by ${event.receivedBy}`}
+                                {event.receivedBy && ` • Received by ${event.receivedBy}`}
                               </p>
                             </div>
                             <div className="text-right shrink-0">
                               <span className={`font-black text-xs block ${
                                 event.type === 'INVOICE_CREATED' ? 'text-red-600' : 'text-emerald-600'
                               }`}>
-                                {event.type === 'INVOICE_CREATED' ? '+' : '-'} ₹{event.amount}
+                                {event.type === 'INVOICE_CREATED' ? '+' : '-'} ₹{event.amount.toFixed(2)}
                               </span>
                             </div>
                           </div>
@@ -630,12 +712,12 @@ export default function CreditLedgerPage() {
                 </>
               ) : null}
             </div>
-            
-            {/* Drawer Footer close panel button */}
+
+            {/* Footer */}
             <div className="p-4 border-t border-gray-100 flex justify-end bg-stone-50">
               <button
                 onClick={handleCloseLedger}
-                className="bg-white border border-stone-300 hover:bg-stone-50 px-5 py-2 rounded-xl text-xs font-bold text-gray-700 shadow-sm"
+                className="bg-white border border-stone-300 hover:bg-stone-50 px-6 py-2 rounded-xl text-xs font-bold text-gray-700 shadow-sm"
               >
                 Close Ledger
               </button>

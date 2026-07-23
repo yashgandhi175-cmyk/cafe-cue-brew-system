@@ -108,7 +108,7 @@ export default function SettlementsPage() {
   const [payAmount, setPayAmount] = useState<number>(0);
   const [cashTendered, setCashTendered] = useState<number>(0);
   const [payReference, setPayReference] = useState('');
-  const [creditType, setCreditType] = useState<'UNTIL_PAY' | 'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM'>('UNTIL_PAY');
+  const [creditType, setCreditType] = useState<'WEEKLY' | 'FIFTEEN_DAYS' | 'MONTHLY' | 'CUSTOM'>('MONTHLY');
   const [dueDate, setDueDate] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
 
@@ -1342,10 +1342,9 @@ export default function SettlementsPage() {
                             value={creditType}
                             onChange={(e) => setCreditType(e.target.value as any)}
                           >
-                            <option value="UNTIL_PAY">Until Pay (No Due Date)</option>
+                            <option value="MONTHLY">Monthly (30 Days - DEFAULT)</option>
                             <option value="WEEKLY">Weekly (7 Days)</option>
                             <option value="FIFTEEN_DAYS">15 Days</option>
-                            <option value="MONTHLY">Monthly (30 Days)</option>
                             <option value="CUSTOM">Custom Due Date</option>
                           </select>
                         </div>
@@ -1364,7 +1363,6 @@ export default function SettlementsPage() {
                             <span className="text-[10px] text-amber-800 font-bold block">DUE DATE:</span>
                             <span className="font-black text-xs text-[#3C2A21]">
                               {(() => {
-                                if (creditType === 'UNTIL_PAY') return 'Until Settled';
                                 const d = new Date();
                                 if (creditType === 'WEEKLY') d.setDate(d.getDate() + 7);
                                 else if (creditType === 'FIFTEEN_DAYS') d.setDate(d.getDate() + 15);
