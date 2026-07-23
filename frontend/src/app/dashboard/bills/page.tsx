@@ -232,12 +232,16 @@ export default function SettlementsPage() {
       const settled = (payments || [])
         .filter((p: any) => p.isSettled)
         .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-      const outstanding = Math.max(0, grandTotal - settled);
-      const hasCredit = (payments || []).some((p: any) => p.method === 'CREDIT');
+      const credit = (payments || [])
+        .filter((p: any) => p.method === 'CREDIT')
+        .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+      const totalCovered = settled + credit;
+      const outstanding = Math.max(0, grandTotal - totalCovered);
+      const hasCredit = credit > 0;
 
-      if (outstanding === 0 && grandTotal > 0) return 'PAID';
-      if (settled > 0 && outstanding > 0) return 'PARTIAL';
-      if (hasCredit && outstanding > 0) return 'CREDIT';
+      if (outstanding === 0 && grandTotal > 0) return hasCredit ? 'CREDIT' : 'PAID';
+      if (totalCovered > 0 && outstanding > 0) return 'PARTIAL';
+      if (hasCredit) return 'CREDIT';
       return 'UNPAID';
     };
 
@@ -745,7 +749,7 @@ export default function SettlementsPage() {
       const creditDueSum = selectedOrder.payments
         .filter((p) => p.method === 'CREDIT')
         .reduce((sum, p) => sum + Number(p.amount), 0);
-      const outstandingSum = Math.max(0, Number(currentBill.grandTotal) - settledSum);
+      const outstandingSum = Math.max(0, Number(currentBill.grandTotal) - settledSum - creditDueSum);
 
       doc.text(`Total Settled:`, 40, y);
       doc.text(`Rs.${settledSum.toFixed(2)}`, 75, y, { align: 'right' });
@@ -782,15 +786,22 @@ export default function SettlementsPage() {
     );
   }
 
-  // Calculate outstanding for selected order
+  // Calculate settled, credit, and outstanding for selected order
   const settledAmount = selectedOrder
     ? selectedOrder.payments
         .filter((p) => p.isSettled)
         .reduce((sum, p) => sum + Number(p.amount), 0)
     : 0;
 
+  const creditTransferred = selectedOrder
+    ? selectedOrder.payments
+        .filter((p) => p.method === 'CREDIT')
+        .reduce((sum, p) => sum + Number(p.amount), 0)
+    : 0;
+
+  const totalCoveredAmount = settledAmount + creditTransferred;
   const grandTotalVal = selectedOrder ? Number(selectedOrder.grandTotal) : 0;
-  const outstandingAmount = Math.max(0, grandTotalVal - settledAmount);
+  const outstandingAmount = Math.max(0, grandTotalVal - totalCoveredAmount);
 
   const activeBill = selectedOrder?.bills.find((b) => b.status !== 'VOIDED');
 

@@ -314,7 +314,7 @@ export class PaymentsService {
                 customerId: bill.order.customerId,
                 invoiceNumber: targetInvoiceNumber,
                 invoiceDate: bill.finalizedAt || new Date(),
-                billAmount: bill.grandTotal,
+                billAmount: finalSettledAmount,
                 outstandingAmount: finalSettledAmount,
                 dueDate: calculatedDueDate,
                 creditType: creditType,
