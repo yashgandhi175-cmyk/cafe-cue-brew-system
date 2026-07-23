@@ -258,6 +258,21 @@ export class CreditsService {
           throw new BadRequestException('This invoice has already been fully paid.');
         }
 
+        // Idempotency Check: Return existing credit payment if duplicate request received within 15 seconds
+        const recentCreditPayment = (typeof tx.creditPayment?.findFirst === 'function')
+          ? await tx.creditPayment.findFirst({
+              where: {
+                creditLedgerId: ledger.id,
+                method,
+                amount,
+                paidAt: { gte: new Date(Date.now() - 15000) },
+              },
+            }).catch(() => null)
+          : null;
+        if (recentCreditPayment) {
+          return [recentCreditPayment];
+        }
+
         if (amount > outstanding) {
           throw new BadRequestException(
             `Payment amount (₹${amount}) cannot exceed outstanding balance of ₹${outstanding}.`,

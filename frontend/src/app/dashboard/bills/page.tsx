@@ -487,7 +487,7 @@ export default function SettlementsPage() {
   };
 
   const handleRecordPayment = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || submitting) return;
     if (payAmount <= 0) {
       setErrorMsg('Payment amount must be greater than zero.');
       return;
@@ -517,6 +517,10 @@ export default function SettlementsPage() {
         throw new Error('Unable to create or locate bill for payment.');
       }
 
+      // Generate deterministic idempotency key for this payment window (stable per 10-second block)
+      const idempotencyWindow = Math.floor(Date.now() / 10000);
+      const idempotencyKey = `PAY_${currentBill.id}_${payMethod}_${Number(payAmount)}_${idempotencyWindow}`;
+
       const res = await fetchWithAuth(`${API_URL}/payments`, {
         method: 'POST',
         headers: {
@@ -528,7 +532,7 @@ export default function SettlementsPage() {
           amount: Number(payAmount),
           amountTendered: payMethod === 'CASH' ? Number(cashTendered) : undefined,
           reference: payReference.trim() || undefined,
-          paymentIdempotencyKey: 'PAY_' + Date.now() + '_' + Math.random().toString(36).substring(7),
+          paymentIdempotencyKey: idempotencyKey,
           creditType: payMethod === 'CREDIT' ? creditType : undefined,
           dueDate: payMethod === 'CREDIT' && creditType === 'CUSTOM' ? dueDate || undefined : undefined,
           notes: payMethod === 'CREDIT' ? remarks.trim() || undefined : undefined,

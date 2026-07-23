@@ -189,6 +189,22 @@ export class PaymentsService {
         let changeDueVal: number | null = null;
         const isSettled = dto.method !== PaymentMethod.CREDIT;
 
+        // Idempotency Check: Return existing payment if duplicate payment received within last 15 seconds
+        const recentDuplicate = (typeof tx.payment?.findFirst === 'function')
+          ? await tx.payment.findFirst({
+              where: {
+                billId: bill.id,
+                method: dto.method,
+                amount: dto.amount,
+                createdAt: { gte: new Date(Date.now() - 15000) },
+              },
+              include: { splitPayments: true },
+            }).catch(() => null)
+          : null;
+        if (recentDuplicate) {
+          return recentDuplicate;
+        }
+
         if (dto.method === PaymentMethod.CASH) {
           const tenderedInput =
             dto.amountTendered !== undefined ? dto.amountTendered : dto.amount;
