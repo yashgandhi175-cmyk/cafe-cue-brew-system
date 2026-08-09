@@ -80,6 +80,9 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   });
 
+  // Set global API prefix
+  app.setGlobalPrefix('api');
+
   // Enable global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
