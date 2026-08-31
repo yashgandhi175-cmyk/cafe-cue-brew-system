@@ -217,6 +217,54 @@ describe('Marketing Queue Engine Unit Tests', () => {
   });
 
   describe('API Key Authentication Guard', () => {
+    it('should throw UnauthorizedException if MARKETING_QUEUE_SECRET is missing in production', () => {
+      const mockProdMissingConfig = {
+        get: jest.fn((key: string) => {
+          if (key === 'MARKETING_QUEUE_SECRET') return undefined;
+          if (key === 'NODE_ENV') return 'production';
+          return null;
+        }),
+      };
+      const guard = new ApiKeyGuard(mockProdMissingConfig as any);
+      const mockExecutionContext = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              'x-ccb-marketing-key': 'any-key',
+            },
+          }),
+        }),
+      } as any;
+
+      expect(() => guard.canActivate(mockExecutionContext)).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if MARKETING_QUEUE_SECRET is missing in non-production', () => {
+      const mockDevMissingConfig = {
+        get: jest.fn((key: string) => {
+          if (key === 'MARKETING_QUEUE_SECRET') return undefined;
+          if (key === 'NODE_ENV') return 'development';
+          return null;
+        }),
+      };
+      const guard = new ApiKeyGuard(mockDevMissingConfig as any);
+      const mockExecutionContext = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              'x-ccb-marketing-key': 'any-key',
+            },
+          }),
+        }),
+      } as any;
+
+      expect(() => guard.canActivate(mockExecutionContext)).toThrow(
+        UnauthorizedException,
+      );
+    });
+
     it('should throw UnauthorizedException if wrong api key supplied in headers', () => {
       const guard = new ApiKeyGuard(mockConfigService as any);
 
@@ -235,7 +283,23 @@ describe('Marketing Queue Engine Unit Tests', () => {
       );
     });
 
-    it('should allow activation if correct api key supplied', () => {
+    it('should throw UnauthorizedException if no api key supplied in headers', () => {
+      const guard = new ApiKeyGuard(mockConfigService as any);
+
+      const mockExecutionContext = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {},
+          }),
+        }),
+      } as any;
+
+      expect(() => guard.canActivate(mockExecutionContext)).toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should allow activation if correct api key supplied via x-ccb-marketing-key', () => {
       const guard = new ApiKeyGuard(mockConfigService as any);
 
       const mockExecutionContext = {
@@ -243,6 +307,29 @@ describe('Marketing Queue Engine Unit Tests', () => {
           getRequest: () => ({
             headers: {
               'x-ccb-marketing-key': 'super-secret-key',
+            },
+          }),
+        }),
+      } as any;
+
+      expect(guard.canActivate(mockExecutionContext)).toBe(true);
+    });
+
+    it('should allow activation if correct api key supplied via x-api-key in production', () => {
+      const mockProdValidConfig = {
+        get: jest.fn((key: string) => {
+          if (key === 'MARKETING_QUEUE_SECRET') return 'prod-secret-key-123';
+          if (key === 'NODE_ENV') return 'production';
+          return null;
+        }),
+      };
+      const guard = new ApiKeyGuard(mockProdValidConfig as any);
+
+      const mockExecutionContext = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: {
+              'x-api-key': 'prod-secret-key-123',
             },
           }),
         }),
