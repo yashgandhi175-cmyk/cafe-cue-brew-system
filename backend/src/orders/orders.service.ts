@@ -429,12 +429,17 @@ export class OrdersService {
       (order as any).items = mergedItems;
       (order as any).payments = mergedPayments;
 
-      const activeBill = await this.prisma.bill.findFirst({
-        where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
-      }) || await this.prisma.bill.findFirst({
-        where: { tableSessionId: order.tableSessionId },
-        orderBy: { createdAt: 'desc' },
-      });
+      const activeBill =
+        (await this.prisma.bill.findFirst({
+          where: {
+            tableSessionId: order.tableSessionId,
+            status: BillStatus.DRAFT,
+          },
+        })) ||
+        (await this.prisma.bill.findFirst({
+          where: { tableSessionId: order.tableSessionId },
+          orderBy: { createdAt: 'desc' },
+        }));
 
       const mergedSubtotal = mergedItems.reduce(
         (sum, item) => sum + Number(item.totalPrice || 0),
@@ -597,7 +602,8 @@ export class OrdersService {
     const where: Prisma.OrderWhereInput = {};
 
     if (filters.status) (where as any).status = filters.status;
-    if (filters.paymentStatus) (where as any).paymentStatus = filters.paymentStatus;
+    if (filters.paymentStatus)
+      (where as any).paymentStatus = filters.paymentStatus;
     if (filters.source) (where as any).source = filters.source;
     if (filters.tableId) (where as any).tableId = filters.tableId;
 
@@ -715,7 +721,8 @@ export class OrdersService {
         let isValid = false;
         if (
           oldStatus === OrderStatus.RECEIVED &&
-          (newStatus === OrderStatus.ACCEPTED || newStatus === OrderStatus.PREPARING)
+          (newStatus === OrderStatus.ACCEPTED ||
+            newStatus === OrderStatus.PREPARING)
         )
           isValid = true;
         else if (
@@ -749,7 +756,8 @@ export class OrdersService {
         if (
           role === Role.WAITER &&
           !(
-            (oldStatus === OrderStatus.READY || oldStatus === OrderStatus.PREPARING) &&
+            (oldStatus === OrderStatus.READY ||
+              oldStatus === OrderStatus.PREPARING) &&
             newStatus === OrderStatus.SERVED
           )
         ) {
@@ -773,7 +781,10 @@ export class OrdersService {
       }
 
       if (newStatus === OrderStatus.COMPLETED) {
-        if (order.paymentStatus !== PaymentStatus.PAID && order.paymentStatus !== PaymentStatus.CREDIT) {
+        if (
+          order.paymentStatus !== PaymentStatus.PAID &&
+          order.paymentStatus !== PaymentStatus.CREDIT
+        ) {
           if (!override || role !== Role.OWNER) {
             throw new BadRequestException(
               'Cannot complete an order that is not fully paid. Requires owner override with a reason.',
@@ -1988,20 +1999,29 @@ export class OrdersService {
     });
 
     // Calculate total subtotal across all active orders in the table session
-    const sessionOrders = (typeof tx.order?.findMany === 'function')
-      ? await tx.order.findMany({
-          where: {
-            tableSessionId: session.id,
-            status: { notIn: ['CANCELLED', 'VOIDED'] },
-          },
-          include: { items: true },
-        }).catch(() => [])
-      : [];
+    const sessionOrders =
+      typeof tx.order?.findMany === 'function'
+        ? await tx.order
+            .findMany({
+              where: {
+                tableSessionId: session.id,
+                status: { notIn: ['CANCELLED', 'VOIDED'] },
+              },
+              include: { items: true },
+            })
+            .catch(() => [])
+        : [];
 
-    const sessionSubtotal = (sessionOrders as any[]).reduce((sum: number, so: any) => {
-      const orderItemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
-      return sum + (orderItemSum || Number(so.subtotal || 0));
-    }, 0);
+    const sessionSubtotal = (sessionOrders as any[]).reduce(
+      (sum: number, so: any) => {
+        const orderItemSum = (so.items || []).reduce(
+          (iSum: number, item: any) => iSum + Number(item.totalPrice || 0),
+          0,
+        );
+        return sum + (orderItemSum || Number(so.subtotal || 0));
+      },
+      0,
+    );
 
     const mergedCalc = this.calcService.calculate({
       subtotal: sessionSubtotal > 0 ? sessionSubtotal : calcResult.subtotal,
@@ -2100,7 +2120,9 @@ export class OrdersService {
     }
 
     const items = cart.items.map((item) => {
-      const addonIdsArray = item.addonIds ? item.addonIds.split(',').filter(Boolean) : [];
+      const addonIdsArray = item.addonIds
+        ? item.addonIds.split(',').filter(Boolean)
+        : [];
       const resolvedAddons = item.menuItem.menuItemAddons
         .map((ma) => ma.addon)
         .filter((a) => addonIdsArray.includes(a.id))

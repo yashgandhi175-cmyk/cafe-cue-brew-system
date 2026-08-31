@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/unbound-method */
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ProviderFactory } from './providers/provider.factory';
@@ -7,18 +8,11 @@ import { EmailProvider } from './providers/email.provider';
 import { SmsProvider } from './providers/sms.provider';
 import { PushProvider } from './providers/push.provider';
 import { CampaignType } from '@prisma/client';
+import { NotImplementedException } from '@nestjs/common';
 import {
   ProviderConfigurationException,
   ProviderRequestException,
-  ProviderWebhookException,
-  ProviderAuthenticationException,
 } from './exceptions/provider.exception';
-import { NotImplementedException } from '@nestjs/common';
-import axios from 'axios';
-import * as crypto from 'crypto';
-
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Marketing Provider Layer Unit Tests', () => {
   let providerFactory: ProviderFactory;
@@ -28,11 +22,7 @@ describe('Marketing Provider Layer Unit Tests', () => {
   let pushProvider: PushProvider;
 
   const mockConfig = {
-    WHATSAPP_API_URL: 'https://graph.facebook.com/v17.0',
-    WHATSAPP_ACCESS_TOKEN: 'token-123',
-    WHATSAPP_PHONE_NUMBER_ID: 'phone-456',
-    WHATSAPP_VERIFY_TOKEN: 'verify-789',
-    WHATSAPP_APP_SECRET: 'secret-abc',
+    WHATSAPP_NUMBER: '+919999999999',
   };
 
   const mockConfigService = {
@@ -70,163 +60,149 @@ describe('Marketing Provider Layer Unit Tests', () => {
       expect(providerFactory.getProvider(CampaignType.WHATSAPP)).toBe(
         whatsappProvider,
       );
+
       expect(providerFactory.getProvider(CampaignType.EMAIL)).toBe(
         emailProvider,
       );
-      expect(providerFactory.getProvider(CampaignType.SMS)).toBe(smsProvider);
-      expect(providerFactory.getProvider(CampaignType.PUSH)).toBe(pushProvider);
+
+      expect(providerFactory.getProvider(CampaignType.SMS)).toBe(
+        smsProvider,
+      );
+
+      expect(providerFactory.getProvider(CampaignType.PUSH)).toBe(
+        pushProvider,
+      );
     });
   });
 
   describe('WhatsApp Configuration Validation', () => {
-    it('should throw ProviderConfigurationException if any required config is missing', () => {
+    it('should throw ProviderConfigurationException if WHATSAPP_NUMBER is missing', () => {
       const badConfigService = {
         get: jest.fn(() => null),
       };
 
-      expect(() => new WhatsAppProvider(badConfigService as any)).toThrow(
-        ProviderConfigurationException,
-      );
+      expect(
+        () => new WhatsAppProvider(badConfigService as any),
+      ).toThrow(ProviderConfigurationException);
+    });
+
+    it('should throw ProviderConfigurationException if WHATSAPP_NUMBER is invalid', () => {
+      const badConfigService = {
+        get: jest.fn(() => '+++---'),
+      };
+
+      expect(
+        () => new WhatsAppProvider(badConfigService as any),
+      ).toThrow(ProviderConfigurationException);
     });
   });
 
-  describe('WhatsApp Message Dispatch', () => {
-    it('should successfully dispatch template message and return messageSid', async () => {
-      mockedAxios.post.mockResolvedValue({
-        data: {
-          messages: [{ id: 'wamid.HBg...' }],
-        },
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
+  describe('WhatsApp Click-to-WhatsApp', () => {
+    it('should generate a WhatsApp link for a plain message', async () => {
+      const res = await whatsappProvider.send('+919876543210', {
+        message: 'Hello from Cafe Cue & Brew!',
       });
 
-      const res = await whatsappProvider.send('+919999999999', {
-        template: { name: 'hello_world' },
+      expect(res.messageSid).toMatch(/^wa-link-/);
+      expect(res.deliveredLocally).toBe(false);
+
+      expect(res.rawResponse.type).toBe('CLICK_TO_WHATSAPP');
+      expect(res.rawResponse.recipient).toBe('919876543210');
+      expect(res.rawResponse.message).toBe(
+        'Hello from Cafe Cue & Brew!',
+      );
+
+      expect(res.rawResponse.url).toBe(
+        'https://wa.me/919876543210?text=Hello%20from%20Cafe%20Cue%20%26%20Brew!',
+      );
+    });
+
+    it('should generate a WhatsApp link from text payload', async () => {
+      const res = await whatsappProvider.send('+91 98765 43210', {
+        text: 'Special offer today!',
       });
 
-      expect(res.messageSid).toBe('wamid.HBg...');
-      expect(res.deliveredLocally).toBe(true);
-      expect(mockedAxios.post).toHaveBeenCalled();
+      expect(res.rawResponse.recipient).toBe('919876543210');
+      expect(res.rawResponse.message).toBe('Special offer today!');
+      expect(res.rawResponse.url).toContain(
+        'https://wa.me/919876543210?text=',
+      );
     });
 
-    it('should throw ProviderAuthenticationException on 401/403 errors', async () => {
-      const errorResponse = {
-        response: {
-          status: 401,
-          data: { error: { message: 'Invalid credentials' } },
-        },
-        isAxiosError: true,
-      };
-      mockedAxios.post.mockRejectedValue(errorResponse);
-      mockedAxios.isAxiosError.mockReturnValue(true);
+    it('should generate a WhatsApp link from body payload', async () => {
+      const res = await whatsappProvider.send('919876543210', {
+        body: 'Visit Cafe Cue & Brew today.',
+      });
 
-      await expect(
-        whatsappProvider.send('+919999999999', { template: { name: 'hello' } }),
-      ).rejects.toThrow(ProviderAuthenticationException);
+      expect(res.rawResponse.recipient).toBe('919876543210');
+      expect(res.rawResponse.message).toBe(
+        'Visit Cafe Cue & Brew today.',
+      );
     });
 
-    it('should throw ProviderRequestException on other provider errors', async () => {
-      const errorResponse = {
-        response: {
-          status: 400,
-          data: { error: { message: 'Invalid phone number' } },
+    it('should generate a WhatsApp link from template body', async () => {
+      const res = await whatsappProvider.send('+919876543210', {
+        template: {
+          body: 'Your special offer is waiting!',
         },
-        isAxiosError: true,
-      };
-      mockedAxios.post.mockRejectedValue(errorResponse);
-      mockedAxios.isAxiosError.mockReturnValue(true);
+      });
 
+      expect(res.rawResponse.message).toBe(
+        'Your special offer is waiting!',
+      );
+    });
+
+    it('should generate a WhatsApp link using generateWhatsAppLink()', () => {
+      const url = whatsappProvider.generateWhatsAppLink(
+        '+91 98765 43210',
+        'Hello Cafe Customer!',
+      );
+
+      expect(url).toBe(
+        'https://wa.me/919876543210?text=Hello%20Cafe%20Customer!',
+      );
+    });
+
+    it('should reject an invalid recipient phone number', async () => {
       await expect(
-        whatsappProvider.send('+919999999999', { template: { name: 'hello' } }),
+        whatsappProvider.send('', {
+          message: 'Test message',
+        }),
+      ).rejects.toThrow(ProviderRequestException);
+    });
+
+    it('should reject a recipient containing no digits', async () => {
+      await expect(
+        whatsappProvider.send('abc-def', {
+          message: 'Test message',
+        }),
       ).rejects.toThrow(ProviderRequestException);
     });
   });
 
-  describe('WhatsApp Webhook & Signature Verification', () => {
-    const rawBody = JSON.stringify({ event: 'test' });
-    const appSecret = 'secret-abc';
-
-    it('should verify signature successfully for valid payloads', () => {
-      const signature =
-        'sha256=' +
-        crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
-      const verified = whatsappProvider.verifyWebhook(signature, rawBody);
-      expect(verified).toBe(true);
+  describe('WhatsApp Click-to-WhatsApp Webhook Behavior', () => {
+    it('should return false because Click-to-WhatsApp has no delivery webhook', () => {
+      expect(whatsappProvider.verifyWebhook('', '')).toBe(false);
     });
 
-    it('should fail verification if signature or body does not match', () => {
-      const signature = 'sha256=invalid-signature-hash';
-      const verified = whatsappProvider.verifyWebhook(signature, rawBody);
-      expect(verified).toBe(false);
-    });
-
-    it('should throw ProviderWebhookException if signature or rawBody are missing', () => {
-      expect(() => whatsappProvider.verifyWebhook('', null)).toThrow(
-        ProviderWebhookException,
-      );
-    });
-  });
-
-  describe('WhatsApp Webhook Mapping & Normalization', () => {
-    it('should normalize Meta status update webhook payload correctly', () => {
-      const webhookPayload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: 'ACCOUNT_ID',
-            changes: [
-              {
-                value: {
-                  messaging_product: 'whatsapp',
-                  statuses: [
-                    {
-                      id: 'wamid.HBg...',
-                      status: 'delivered',
-                      timestamp: '1603412543',
-                      recipient_id: '+919999999999',
-                    },
-                    {
-                      id: 'wamid.HBg2...',
-                      status: 'failed',
-                      timestamp: '1603412544',
-                      recipient_id: '+919999999999',
-                      errors: [{ code: 131042, message: 'Payment required' }],
-                    },
-                  ],
-                },
-                field: 'messages',
-              },
-            ],
-          },
-        ],
-      };
-
-      const normalized = whatsappProvider.mapWebhookEvent(webhookPayload);
-      expect(normalized.length).toBe(2);
-
-      expect(normalized[0].messageSid).toBe('wamid.HBg...');
-      expect(normalized[0].status).toBe('DELIVERED');
-      expect(normalized[0].errorCode).toBeUndefined();
-
-      expect(normalized[1].messageSid).toBe('wamid.HBg2...');
-      expect(normalized[1].status).toBe('FAILED');
-      expect(normalized[1].errorCode).toBe('131042');
+    it('should return an empty webhook event list', () => {
+      expect(whatsappProvider.mapWebhookEvent({})).toEqual([]);
     });
   });
 
   describe('Stubbed Providers', () => {
     it('should throw NotImplementedException on execution', async () => {
-      await expect(emailProvider.send('email@test.com', {})).rejects.toThrow(
-        NotImplementedException,
-      );
-      await expect(smsProvider.send('+919999999999', {})).rejects.toThrow(
-        NotImplementedException,
-      );
-      await expect(pushProvider.send('push-token', {})).rejects.toThrow(
-        NotImplementedException,
-      );
+      await expect(
+        emailProvider.send('email@test.com', {}),
+      ).rejects.toThrow(NotImplementedException);
+
+      await expect(
+        smsProvider.send('+919999999999', {}),
+      ).rejects.toThrow(NotImplementedException);
+
+      await expect(
+        pushProvider.send('push-token', {}),
+      ).rejects.toThrow(NotImplementedException);
     });
   });
 });

@@ -114,18 +114,27 @@ export class PaymentsService {
         // 4. Sync live session items total to bill if session exists
         let liveGrandTotal = Number(bill.grandTotal);
         if (bill.tableSessionId && typeof tx.order?.findMany === 'function') {
-          const sessionOrders = await tx.order.findMany({
-            where: {
-              tableSessionId: bill.tableSessionId,
-              status: { notIn: ['CANCELLED', 'VOIDED'] },
-            },
-            include: { items: true },
-          }).catch(() => []);
+          const sessionOrders = await tx.order
+            .findMany({
+              where: {
+                tableSessionId: bill.tableSessionId,
+                status: { notIn: ['CANCELLED', 'VOIDED'] },
+              },
+              include: { items: true },
+            })
+            .catch(() => []);
 
-          const sessionSubtotal = (sessionOrders as any[]).reduce((sum: number, so: any) => {
-            const itemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
-            return sum + (itemSum || Number(so.subtotal || 0));
-          }, 0);
+          const sessionSubtotal = (sessionOrders as any[]).reduce(
+            (sum: number, so: any) => {
+              const itemSum = (so.items || []).reduce(
+                (iSum: number, item: any) =>
+                  iSum + Number(item.totalPrice || 0),
+                0,
+              );
+              return sum + (itemSum || Number(so.subtotal || 0));
+            },
+            0,
+          );
 
           if (Number(sessionSubtotal) > 0) {
             const calcResult = this.calcService.calculate({
@@ -166,11 +175,17 @@ export class PaymentsService {
               },
             })
           : await tx.payment.findMany({
-              where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
+              where: {
+                billId: bill.id,
+                status: PaymentStatusDetail.COMPLETED,
+                isSettled: true,
+              },
             });
 
-        const totalSettledSum = existingSettledPayments
-          .reduce((sum, p) => sum + Number(p.amount), 0);
+        const totalSettledSum = existingSettledPayments.reduce(
+          (sum, p) => sum + Number(p.amount),
+          0,
+        );
 
         const grandTotal = Number(bill.grandTotal);
         const outstanding = this.calcService.roundToTwo(
@@ -190,17 +205,20 @@ export class PaymentsService {
         const isSettled = dto.method !== PaymentMethod.CREDIT;
 
         // Idempotency Check: Return existing payment if duplicate payment received within last 15 seconds
-        const recentDuplicate = (typeof tx.payment?.findFirst === 'function')
-          ? await tx.payment.findFirst({
-              where: {
-                billId: bill.id,
-                method: dto.method,
-                amount: dto.amount,
-                createdAt: { gte: new Date(Date.now() - 15000) },
-              },
-              include: { splitPayments: true },
-            }).catch(() => null)
-          : null;
+        const recentDuplicate =
+          typeof tx.payment?.findFirst === 'function'
+            ? await tx.payment
+                .findFirst({
+                  where: {
+                    billId: bill.id,
+                    method: dto.method,
+                    amount: dto.amount,
+                    createdAt: { gte: new Date(Date.now() - 15000) },
+                  },
+                  include: { splitPayments: true },
+                })
+                .catch(() => null)
+            : null;
         if (recentDuplicate) {
           return recentDuplicate;
         }
@@ -292,7 +310,9 @@ export class PaymentsService {
             calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
           }
 
-          const targetInvoiceNumber = bill.invoiceNumber || `INV-${bill.id.substring(0, 8).toUpperCase()}`;
+          const targetInvoiceNumber =
+            bill.invoiceNumber ||
+            `INV-${bill.id.substring(0, 8).toUpperCase()}`;
 
           const existingLedger = await tx.creditLedger.findUnique({
             where: { invoiceNumber: targetInvoiceNumber },
@@ -336,7 +356,10 @@ export class PaymentsService {
               },
             });
             if (creditEntry) {
-              const remCredit = Math.max(0, Number(creditEntry.outstandingAmount) - finalSettledAmount);
+              const remCredit = Math.max(
+                0,
+                Number(creditEntry.outstandingAmount) - finalSettledAmount,
+              );
               await tx.creditLedger.update({
                 where: { id: creditEntry.id },
                 data: {
@@ -359,11 +382,17 @@ export class PaymentsService {
               },
             })
           : await tx.payment.findMany({
-              where: { billId: bill.id, status: PaymentStatusDetail.COMPLETED, isSettled: true },
+              where: {
+                billId: bill.id,
+                status: PaymentStatusDetail.COMPLETED,
+                isSettled: true,
+              },
             });
 
-        const finalSettledSum = allSettledPayments
-          .reduce((sum, p) => sum + Number(p.amount), 0);
+        const finalSettledSum = allSettledPayments.reduce(
+          (sum, p) => sum + Number(p.amount),
+          0,
+        );
 
         const creditPayments = bill.tableSessionId
           ? await tx.payment.findMany({
@@ -380,7 +409,10 @@ export class PaymentsService {
         let finalPaymentStatus: PaymentStatus = PaymentStatus.UNPAID;
         let finalBillStatus: BillStatus = BillStatus.FINALIZED;
 
-        const outstandingVal = Math.max(0, this.calcService.roundToTwo(grandTotal - finalSettledSum));
+        const outstandingVal = Math.max(
+          0,
+          this.calcService.roundToTwo(grandTotal - finalSettledSum),
+        );
 
         if (outstandingVal === 0 && grandTotal > 0) {
           finalPaymentStatus = PaymentStatus.PAID;

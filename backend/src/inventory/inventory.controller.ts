@@ -25,6 +25,8 @@ import {
 } from './dto/inventory.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { Response } from 'express';
 
@@ -37,6 +39,7 @@ export class InventoryController {
   // INGREDIENTS
   // ==========================================
   @Post('ingredients')
+  @Roles(Role.OWNER, Role.MANAGER)
   createIngredient(
     @Body() dto: CreateIngredientDto,
     @CurrentUser() user: { id: string; role: string },
@@ -45,11 +48,13 @@ export class InventoryController {
   }
 
   @Get('ingredients')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAllIngredients(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.findAllIngredients(user.id);
   }
 
   @Get('ingredients/:id')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findOneIngredient(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -58,6 +63,7 @@ export class InventoryController {
   }
 
   @Patch('ingredients/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   updateIngredient(
     @Param('id') id: string,
     @Body() dto: UpdateIngredientDto,
@@ -67,6 +73,7 @@ export class InventoryController {
   }
 
   @Delete('ingredients/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   deleteIngredient(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -78,6 +85,7 @@ export class InventoryController {
   // RECIPES
   // ==========================================
   @Post('recipes')
+  @Roles(Role.OWNER, Role.MANAGER)
   createRecipe(
     @Body() dto: CreateRecipeDto,
     @CurrentUser() user: { id: string; role: string },
@@ -86,11 +94,13 @@ export class InventoryController {
   }
 
   @Get('recipes')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAllRecipes(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.findAllRecipes(user.id);
   }
 
   @Get('recipes/:id')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findOneRecipe(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -99,6 +109,7 @@ export class InventoryController {
   }
 
   @Patch('recipes/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   updateRecipe(
     @Param('id') id: string,
     @Body() dto: UpdateRecipeDto,
@@ -108,6 +119,7 @@ export class InventoryController {
   }
 
   @Delete('recipes/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   deleteRecipe(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -119,6 +131,7 @@ export class InventoryController {
   // SUPPLIERS
   // ==========================================
   @Post('suppliers')
+  @Roles(Role.OWNER, Role.MANAGER)
   createSupplier(
     @Body() dto: CreateSupplierDto,
     @CurrentUser() user: { id: string; role: string },
@@ -127,11 +140,13 @@ export class InventoryController {
   }
 
   @Get('suppliers')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER)
   findAllSuppliers(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.findAllSuppliers(user.id);
   }
 
   @Get('suppliers/:id')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER)
   findOneSupplier(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -140,6 +155,7 @@ export class InventoryController {
   }
 
   @Patch('suppliers/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   updateSupplier(
     @Param('id') id: string,
     @Body() dto: UpdateSupplierDto,
@@ -149,6 +165,7 @@ export class InventoryController {
   }
 
   @Delete('suppliers/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   deleteSupplier(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -160,6 +177,7 @@ export class InventoryController {
   // PURCHASES
   // ==========================================
   @Post('purchases')
+  @Roles(Role.OWNER, Role.MANAGER)
   createPurchase(
     @Body() dto: CreatePurchaseDto,
     @CurrentUser() user: { id: string; role: string },
@@ -168,11 +186,13 @@ export class InventoryController {
   }
 
   @Get('purchases')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER)
   findAllPurchases(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.findAllPurchases(user.id);
   }
 
   @Get('purchases/:id')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER)
   findOnePurchase(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -181,6 +201,7 @@ export class InventoryController {
   }
 
   @Patch('purchases/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   updatePurchase(
     @Param('id') id: string,
     @Body() dto: UpdatePurchaseDto,
@@ -190,6 +211,7 @@ export class InventoryController {
   }
 
   @Delete('purchases/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   deletePurchase(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -198,6 +220,7 @@ export class InventoryController {
   }
 
   @Post('purchases/:id/finalize')
+  @Roles(Role.OWNER, Role.MANAGER)
   finalizePurchase(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -206,6 +229,7 @@ export class InventoryController {
   }
 
   @Post('purchases/:id/reverse')
+  @Roles(Role.OWNER, Role.MANAGER)
   reversePurchase(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -217,6 +241,7 @@ export class InventoryController {
   // WASTAGE
   // ==========================================
   @Post('wastage')
+  @Roles(Role.OWNER, Role.MANAGER)
   createWastage(
     @Body() dto: CreateWastageDto,
     @CurrentUser() user: { id: string; role: string },
@@ -225,11 +250,13 @@ export class InventoryController {
   }
 
   @Get('wastage')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAllWastage(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.findAllWastage(user.id);
   }
 
   @Get('wastage/:id')
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findOneWastage(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -238,6 +265,7 @@ export class InventoryController {
   }
 
   @Delete('wastage/:id')
+  @Roles(Role.OWNER, Role.MANAGER)
   deleteWastage(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -249,6 +277,7 @@ export class InventoryController {
   // ADJUSTMENTS
   // ==========================================
   @Post('adjust')
+  @Roles(Role.OWNER, Role.MANAGER)
   adjustStock(
     @Body() dto: StockAdjustmentDto,
     @CurrentUser() user: { id: string; role: string },
@@ -260,6 +289,7 @@ export class InventoryController {
   // LEDGER
   // ==========================================
   @Get('ledger')
+  @Roles(Role.OWNER, Role.MANAGER)
   getLedger(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.getLedger(user.id);
   }
@@ -268,11 +298,13 @@ export class InventoryController {
   // ANALYTICS & COSTING
   // ==========================================
   @Get('value-estimate')
+  @Roles(Role.OWNER, Role.MANAGER)
   getValueEstimate(@CurrentUser() user: { id: string; role: string }) {
     return this.inventoryService.getValueEstimate(user.id);
   }
 
   @Get('food-cost')
+  @Roles(Role.OWNER, Role.MANAGER)
   getFoodCost(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
@@ -282,6 +314,7 @@ export class InventoryController {
   }
 
   @Get('wastage-analytics')
+  @Roles(Role.OWNER, Role.MANAGER)
   getWastageAnalytics(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
@@ -295,6 +328,7 @@ export class InventoryController {
   }
 
   @Get('operating-contribution')
+  @Roles(Role.OWNER, Role.MANAGER)
   getOperatingContribution(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
@@ -311,6 +345,7 @@ export class InventoryController {
   // EXPORTS
   // ==========================================
   @Get('export/ledger')
+  @Roles(Role.OWNER, Role.MANAGER)
   async exportLedger(
     @CurrentUser() user: { id: string; role: string },
     @Res() res: Response,
@@ -322,6 +357,7 @@ export class InventoryController {
   }
 
   @Get('export/stock-balance')
+  @Roles(Role.OWNER, Role.MANAGER)
   async exportStockBalance(
     @CurrentUser() user: { id: string; role: string },
     @Res() res: Response,
@@ -336,6 +372,7 @@ export class InventoryController {
   }
 
   @Get('export/wastage')
+  @Roles(Role.OWNER, Role.MANAGER)
   async exportWastage(
     @CurrentUser() user: { id: string; role: string },
     @Res() res: Response,

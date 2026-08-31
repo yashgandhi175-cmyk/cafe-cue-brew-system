@@ -98,7 +98,10 @@ export class BillingService {
 
       let bill = order.tableSessionId
         ? await tx.bill.findFirst({
-            where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
+            where: {
+              tableSessionId: order.tableSessionId,
+              status: BillStatus.DRAFT,
+            },
           })
         : await tx.bill.findFirst({
             where: { orderId, status: BillStatus.DRAFT },
@@ -242,17 +245,25 @@ export class BillingService {
       // Compute merged session subtotal if tableSessionId exists
       let effectiveSubtotal = Number(order.subtotal);
       if (order.tableSessionId && typeof tx.order?.findMany === 'function') {
-        const sessionOrders = await tx.order.findMany({
-          where: {
-            tableSessionId: order.tableSessionId,
-            status: { notIn: ['CANCELLED', 'VOIDED'] },
+        const sessionOrders = await tx.order
+          .findMany({
+            where: {
+              tableSessionId: order.tableSessionId,
+              status: { notIn: ['CANCELLED', 'VOIDED'] },
+            },
+            include: { items: true },
+          })
+          .catch(() => []);
+        const sessionSum = (sessionOrders as any[]).reduce(
+          (sum: number, so: any) => {
+            const itemSum = (so.items || []).reduce(
+              (iSum: number, item: any) => iSum + Number(item.totalPrice || 0),
+              0,
+            );
+            return sum + (itemSum || Number(so.subtotal || 0));
           },
-          include: { items: true },
-        }).catch(() => []);
-        const sessionSum = (sessionOrders as any[]).reduce((sum: number, so: any) => {
-          const itemSum = (so.items || []).reduce((iSum: number, item: any) => iSum + Number(item.totalPrice || 0), 0);
-          return sum + (itemSum || Number(so.subtotal || 0));
-        }, 0);
+          0,
+        );
         if (Number(sessionSum) > 0) effectiveSubtotal = Number(sessionSum);
       }
 
@@ -292,7 +303,10 @@ export class BillingService {
       // Fetch the draft bill or create one if missing
       let bill = order.tableSessionId
         ? await tx.bill.findFirst({
-            where: { tableSessionId: order.tableSessionId, status: BillStatus.DRAFT },
+            where: {
+              tableSessionId: order.tableSessionId,
+              status: BillStatus.DRAFT,
+            },
           })
         : await tx.bill.findFirst({
             where: { orderId, status: BillStatus.DRAFT },

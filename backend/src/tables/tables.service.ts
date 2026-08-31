@@ -277,7 +277,9 @@ export class TablesService {
     const { sourceTableId, targetTableId, reason } = dto;
 
     if (sourceTableId === targetTableId) {
-      throw new BadRequestException('Source and target table cannot be the same.');
+      throw new BadRequestException(
+        'Source and target table cannot be the same.',
+      );
     }
 
     const sourceTable = await this.prisma.restaurantTable.findUnique({
@@ -357,7 +359,10 @@ export class TablesService {
 
       // 4. Update waiter calls if any
       await tx.waiterCall.updateMany({
-        where: { tableId: sourceTableId, status: { in: ['PENDING', 'ACKNOWLEDGED'] } },
+        where: {
+          tableId: sourceTableId,
+          status: { in: ['PENDING', 'ACKNOWLEDGED'] },
+        },
         data: {
           tableId: targetTableId,
           tableNumberSnapshot: targetTable.tableNumber,
@@ -405,7 +410,9 @@ export class TablesService {
     const { sourceTableIds, targetTableId, reason } = dto;
 
     if (sourceTableIds.includes(targetTableId)) {
-      throw new BadRequestException('Target table cannot be in the list of source tables to merge.');
+      throw new BadRequestException(
+        'Target table cannot be in the list of source tables to merge.',
+      );
     }
 
     const targetTable = await this.prisma.restaurantTable.findUnique({
@@ -455,7 +462,10 @@ export class TablesService {
           });
 
           await tx.bill.updateMany({
-            where: { tableSessionId: sourceSession.id, status: BillStatus.DRAFT },
+            where: {
+              tableSessionId: sourceSession.id,
+              status: BillStatus.DRAFT,
+            },
             data: { status: BillStatus.VOIDED },
           });
 
@@ -490,7 +500,10 @@ export class TablesService {
         }
 
         await tx.waiterCall.updateMany({
-          where: { tableId: sTable.id, status: { in: ['PENDING', 'ACKNOWLEDGED'] } },
+          where: {
+            tableId: sTable.id,
+            status: { in: ['PENDING', 'ACKNOWLEDGED'] },
+          },
           data: {
             tableId: targetTableId,
             tableNumberSnapshot: targetTable.tableNumber,
@@ -516,7 +529,10 @@ export class TablesService {
         },
       });
 
-      const totalSubtotal = allSessionOrders.reduce((acc, o) => acc + Number(o.subtotal), 0);
+      const totalSubtotal = allSessionOrders.reduce(
+        (acc, o) => acc + Number(o.subtotal),
+        0,
+      );
 
       const dbSettings = await tx.restaurantSettings.findFirst();
       const settings = dbSettings || {
@@ -539,7 +555,7 @@ export class TablesService {
         settings: settings as any,
       });
 
-      let targetDraftBill = await tx.bill.findFirst({
+      const targetDraftBill = await tx.bill.findFirst({
         where: { tableSessionId: targetSession.id, status: BillStatus.DRAFT },
       });
 

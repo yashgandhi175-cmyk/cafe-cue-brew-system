@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsArray, ArrayMinSize, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsArray,
+  ArrayMinSize,
+  IsOptional,
+} from 'class-validator';
 
 export class MergeTablesDto {
   @IsArray()

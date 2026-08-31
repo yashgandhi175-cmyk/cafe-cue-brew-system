@@ -24,6 +24,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { fetchWithAuth } from '@/lib/api';
+import { sendWhatsAppMessage, buildCreditReminderMessage } from '@/lib/whatsapp';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
@@ -403,13 +404,23 @@ export default function CreditLedgerPage() {
                         {s.status}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-center">
+                    <td className="py-4 px-6 text-center flex items-center justify-center gap-2">
                       <button
                         onClick={() => handleOpenLedger(s.customerId)}
                         className="inline-flex items-center gap-1 text-xs text-[#8F6A50] hover:text-[#3C2A21] hover:underline bg-[#EAD8C0]/15 hover:bg-[#EAD8C0]/30 px-3 py-1.5 rounded-full transition-colors"
                       >
                         <span>Ledger Details</span>
                         <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const msg = buildCreditReminderMessage(s.name, s.outstandingAmount);
+                          sendWhatsAppMessage(s.phone, msg);
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-full transition-colors shadow-xs"
+                        title="Send WhatsApp Credit Reminder"
+                      >
+                        <span>Send WhatsApp</span>
                       </button>
                     </td>
                   </tr>
@@ -462,17 +473,29 @@ export default function CreditLedgerPage() {
                         <h4 className="text-lg font-black text-gray-800">{details.customer.name}</h4>
                         <p className="text-xs text-gray-400 font-bold">{details.customer.phone} {details.customer.email && `• ${details.customer.email}`}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] text-gray-400 font-extrabold uppercase block">Credit Status</span>
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                          details.customer.overdueAmount > 0
-                            ? 'bg-red-50 text-red-600 border border-red-200'
-                            : details.customer.totalOutstanding > 0
-                            ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                            : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                        }`}>
-                          {details.customer.overdueAmount > 0 ? 'OVERDUE' : details.customer.totalOutstanding > 0 ? 'ACTIVE' : 'CLEARED'}
-                        </span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            if (!details) return;
+                            const msg = buildCreditReminderMessage(details.customer.name, details.customer.totalOutstanding);
+                            sendWhatsAppMessage(details.customer.phone, msg);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 shadow-xs transition-colors"
+                        >
+                          <span>Send WhatsApp</span>
+                        </button>
+                        <div className="text-right">
+                          <span className="text-[10px] text-gray-400 font-extrabold uppercase block">Credit Status</span>
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            details.customer.overdueAmount > 0
+                              ? 'bg-red-50 text-red-600 border border-red-200'
+                              : details.customer.totalOutstanding > 0
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                          }`}>
+                            {details.customer.overdueAmount > 0 ? 'OVERDUE' : details.customer.totalOutstanding > 0 ? 'ACTIVE' : 'CLEARED'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 

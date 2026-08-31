@@ -19,6 +19,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { sendWhatsAppMessage, buildOfferMessage } from '@/lib/whatsapp';
 
 interface Coupon {
   id: string;
@@ -475,7 +476,22 @@ export default function CouponsPage() {
                       </button>
                     </td>
                     <td className="p-4 pr-6 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 items-center">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            const discountStr = c.type === 'FLAT' ? `₹${c.value} OFF` : `${c.value}% OFF`;
+                            const msg = buildOfferMessage('Valued Customer', `${c.name} (${c.code})`, `Use coupon ${c.code} for ${discountStr} on your next order!`);
+                            const phone = prompt('Enter customer phone number (e.g. 9876543210):');
+                            if (phone !== null) {
+                              sendWhatsAppMessage(phone, msg);
+                            }
+                          }}
+                          className="h-8 px-2.5 text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-xs font-extrabold rounded-lg flex items-center gap-1 shadow-xs"
+                          title="Send Coupon Offer via WhatsApp"
+                        >
+                          <span>Send WhatsApp</span>
+                        </Button>
                         <Button
                           variant="ghost"
                           onClick={() => openEditModal(c)}

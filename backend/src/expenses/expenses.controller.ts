@@ -17,6 +17,8 @@ import {
 } from './dto/expenses.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { Response } from 'express';
 
@@ -26,6 +28,7 @@ export class ExpensesController {
   constructor(private readonly expensesService: ExpensesService) {}
 
   @Post()
+  @Roles(Role.OWNER, Role.MANAGER)
   create(
     @Body() dto: CreateExpenseDto,
     @CurrentUser() user: { id: string; role: string },
@@ -34,11 +37,13 @@ export class ExpensesController {
   }
 
   @Get()
+  @Roles(Role.OWNER, Role.MANAGER)
   findAll(@CurrentUser() user: { id: string; role: string }) {
     return this.expensesService.findAllExpenses(user.id);
   }
 
   @Get('export')
+  @Roles(Role.OWNER, Role.MANAGER)
   async export(
     @CurrentUser() user: { id: string; role: string },
     @Res() res: Response,
@@ -50,6 +55,7 @@ export class ExpensesController {
   }
 
   @Get(':id')
+  @Roles(Role.OWNER, Role.MANAGER)
   findOne(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -58,6 +64,7 @@ export class ExpensesController {
   }
 
   @Patch(':id')
+  @Roles(Role.OWNER, Role.MANAGER)
   update(
     @Param('id') id: string,
     @Body() dto: UpdateExpenseDto,
@@ -67,6 +74,7 @@ export class ExpensesController {
   }
 
   @Delete(':id')
+  @Roles(Role.OWNER, Role.MANAGER)
   remove(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -75,6 +83,7 @@ export class ExpensesController {
   }
 
   @Post(':id/void')
+  @Roles(Role.OWNER, Role.MANAGER)
   void(
     @Param('id') id: string,
     @Body() dto: VoidExpenseDto,

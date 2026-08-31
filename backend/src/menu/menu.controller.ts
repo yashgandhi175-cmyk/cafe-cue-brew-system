@@ -34,6 +34,8 @@ export class MenuController {
   }
 
   @Get('addons')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAllAddons(@Query('all') all?: string) {
     const includeInactive = all === 'true';
     return this.menuService.findAllAddons(includeInactive);
@@ -65,6 +67,8 @@ export class MenuController {
   }
 
   @Get('items')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAllMenuItems(
     @Query('categoryId') categoryId?: string,
     @Query('all') all?: string,
@@ -74,6 +78,8 @@ export class MenuController {
   }
 
   @Get('items/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findOneMenuItem(@Param('id') id: string) {
     return this.menuService.findOneMenuItem(id);
   }
@@ -82,12 +88,13 @@ export class MenuController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.OWNER, Role.MANAGER)
   bulkPriceUpdate(
-    @Body() payload: {
+    @Body()
+    payload: {
       categoryId?: string;
       updateType: 'PERCENTAGE' | 'FLAT';
       action: 'INCREASE' | 'DECREASE';
       value: number;
-    }
+    },
   ) {
     return this.menuService.bulkPriceUpdate(payload);
   }

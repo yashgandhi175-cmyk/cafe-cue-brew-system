@@ -14,15 +14,35 @@ import { JwtStrategy } from './jwt.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_SECRET') ||
-          'cafe-cue-brew-super-secret-key-2026',
-        signOptions: {
-          expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ||
-            '12h') as unknown as number,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const jwtSecret = configService.get<string>('JWT_SECRET');
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
+
+        if (!jwtSecret) {
+          throw new Error(
+            'CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing!',
+          );
+        }
+
+        if (
+          isProduction &&
+          (jwtSecret === 'cafe-cue-brew-super-secret-key-2026' ||
+            jwtSecret === 'dev-secret-key')
+        ) {
+          throw new Error(
+            'CRITICAL SECURITY ERROR: Insecure default JWT_SECRET cannot be used in production mode!',
+          );
+        }
+
+        return {
+          secret: jwtSecret,
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_EXPIRES_IN') ||
+              '12h') as unknown as number,
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

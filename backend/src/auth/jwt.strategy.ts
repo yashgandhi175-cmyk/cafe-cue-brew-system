@@ -10,12 +10,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     configService: ConfigService,
     private prisma: PrismaService,
   ) {
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    const isProduction = configService.get<string>('NODE_ENV') === 'production';
+
+    if (!jwtSecret) {
+      throw new Error(
+        'CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing!',
+      );
+    }
+
+    if (
+      isProduction &&
+      (jwtSecret === 'cafe-cue-brew-super-secret-key-2026' ||
+        jwtSecret === 'dev-secret-key')
+    ) {
+      throw new Error(
+        'CRITICAL SECURITY ERROR: Insecure default JWT_SECRET cannot be used in production mode!',
+      );
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        configService.get<string>('JWT_SECRET') ||
-        'cafe-cue-brew-super-secret-key-2026',
+      secretOrKey: jwtSecret,
     });
   }
 

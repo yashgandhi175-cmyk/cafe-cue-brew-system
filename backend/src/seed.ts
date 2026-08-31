@@ -20,7 +20,12 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
   const categoryCount = await prisma.category.count();
   const menuItemCount = await prisma.menuItem.count();
 
-  if (settingsCount > 0 && staffCount > 0 && categoryCount > 0 && menuItemCount > 0) {
+  if (
+    settingsCount > 0 &&
+    staffCount > 0 &&
+    categoryCount > 0 &&
+    menuItemCount > 0
+  ) {
     return;
   }
 
@@ -42,7 +47,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       closingTime: '23:00',
       currency: 'INR',
       timezone: 'Asia/Kolkata',
-      
+
       // Billing Defaults
       enableCash: true,
       enableUpi: true,
@@ -52,7 +57,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       enableServiceCharge: false,
       serviceChargePercentage: 0.0,
       invoicePrefix: 'CCB',
-      
+
       // GST Defaults
       enableGst: true,
       gstPercentage: 5.0,
@@ -60,20 +65,20 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       sgstPercentage: 2.5,
       gstin: '27AAAAA1111A1Z1',
       taxInclusivePricing: true,
-      
+
       // Night Charges Defaults
       enableNightCharges: false,
       nightStart: '23:00',
       nightEnd: '05:00',
       nightChargeType: 'PERCENTAGE',
       nightChargeValue: 10.0,
-      
+
       // Discount Limit Settings
-      cashierMaxDiscountPercent: 10.00,
-      managerMaxDiscountPercent: 25.00,
+      cashierMaxDiscountPercent: 10.0,
+      managerMaxDiscountPercent: 25.0,
       managerCanViewFinancialAnalytics: false,
       managerCanViewFinancialReports: false,
-      
+
       // Order settings
       qrOrderingEnabled: true,
       requireCustomerName: true,
@@ -87,7 +92,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       trackStaffActions: true,
       trackCancellationReasons: true,
       trackOrderSource: true,
-      
+
       // Digital Menu defaults
       enableQrMenu: true,
       showOfferCarousel: true,
@@ -99,7 +104,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       showVegNonVeg: true,
       showUnavailableItems: true,
       enableCallWaiter: true,
-      
+
       // Security defaults
       pinLength: 4,
       sessionTimeout: 720,
@@ -107,7 +112,7 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       accountLockDuration: 15,
       trackLoginHistory: true,
       trackStaffActivity: true,
-      
+
       // Notification defaults
       enableNewOrderSound: true,
       enableWaiterCallSound: true,
@@ -162,7 +167,9 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       update: {},
       create: {
         tableId: table.id,
-        token: `TOKEN_TABLE_${num}_` + Math.random().toString(36).substring(2, 10).toUpperCase(),
+        token:
+          `TOKEN_TABLE_${num}_` +
+          Math.random().toString(36).substring(2, 10).toUpperCase(),
       },
     });
   }
@@ -219,11 +226,48 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
   // 6. Define menu items
   const menuItems: SeedItem[] = [
     // --- Starters ---
-    { name: 'Garlic Bread', category: 'Starters', basePrice: 80, description: 'Crispy garlic bread brushed with butter and herbs.', isVeg: true, prepTime: 8 },
-    { name: 'Bread Pizza', category: 'Starters', basePrice: 80, description: 'Crispy bread slices topped with pizza sauce, veggies, and melted cheese.', isVeg: true, prepTime: 10 },
-    { name: 'Cheese Chilli Toast', category: 'Starters', basePrice: 110, description: 'Toasted bread topped with spicy chillies and melted cheese.', isVeg: true, prepTime: 8 },
-    { name: 'Cheese Nachos', category: 'Starters', basePrice: 140, description: 'Crispy tortilla chips topped with warm cheese sauce.', isVeg: true, prepTime: 8 },
-    { name: 'Mexican Cheese Nachos', category: 'Starters', basePrice: 160, description: 'Nachos loaded with Mexican spices, salsa, and cheese.', isVeg: true, prepTime: 10 },
+    {
+      name: 'Garlic Bread',
+      category: 'Starters',
+      basePrice: 80,
+      description: 'Crispy garlic bread brushed with butter and herbs.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Bread Pizza',
+      category: 'Starters',
+      basePrice: 80,
+      description:
+        'Crispy bread slices topped with pizza sauce, veggies, and melted cheese.',
+      isVeg: true,
+      prepTime: 10,
+    },
+    {
+      name: 'Cheese Chilli Toast',
+      category: 'Starters',
+      basePrice: 110,
+      description:
+        'Toasted bread topped with spicy chillies and melted cheese.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Cheese Nachos',
+      category: 'Starters',
+      basePrice: 140,
+      description: 'Crispy tortilla chips topped with warm cheese sauce.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Mexican Cheese Nachos',
+      category: 'Starters',
+      basePrice: 160,
+      description: 'Nachos loaded with Mexican spices, salsa, and cheese.',
+      isVeg: true,
+      prepTime: 10,
+    },
 
     // --- Momos ---
     {
@@ -242,7 +286,8 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
       name: 'Tandoori Momos',
       category: 'Momos',
       basePrice: 80,
-      description: 'Steamed dumplings marinated in tandoori spices and grilled.',
+      description:
+        'Steamed dumplings marinated in tandoori spices and grilled.',
       isVeg: true,
       prepTime: 15,
       variants: [
@@ -276,14 +321,74 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     },
 
     // --- Sandwich ---
-    { name: 'Onion Cheese Sandwich', category: 'Sandwich', basePrice: 70, description: 'Simple yet delicious grilled sandwich with onions and cheese.', isVeg: true, prepTime: 8 },
-    { name: 'Corn Sandwich', category: 'Sandwich', basePrice: 80, description: 'Sweet corn and cream filled grilled sandwich.', isVeg: true, prepTime: 8 },
-    { name: 'Onion Capsicum Sandwich', category: 'Sandwich', basePrice: 80, description: 'Grilled sandwich with crunchy onions, capsicum, and cheese.', isVeg: true, prepTime: 8 },
-    { name: 'Veg Cheese Sandwich', category: 'Sandwich', basePrice: 100, description: 'Classic grilled sandwich filled with fresh vegetables and cheese.', isVeg: true, prepTime: 10 },
-    { name: 'Chocolate Sandwich', category: 'Sandwich', basePrice: 110, description: 'Sweet dessert sandwich filled with rich melted chocolate.', isVeg: true, prepTime: 8 },
-    { name: 'Tandoori Veg Sandwich', category: 'Sandwich', basePrice: 120, description: 'Grilled veg sandwich with tandoori spiced spread.', isVeg: true, prepTime: 10 },
-    { name: 'Paneer Tandoori Sandwich', category: 'Sandwich', basePrice: 140, description: 'Grilled sandwich loaded with tandoori marinated paneer blocks.', isVeg: true, prepTime: 12 },
-    { name: 'Peri Peri Paneer Sandwich', category: 'Sandwich', basePrice: 140, description: 'Grilled sandwich featuring fiery peri peri paneer.', isVeg: true, prepTime: 12 },
+    {
+      name: 'Onion Cheese Sandwich',
+      category: 'Sandwich',
+      basePrice: 70,
+      description:
+        'Simple yet delicious grilled sandwich with onions and cheese.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Corn Sandwich',
+      category: 'Sandwich',
+      basePrice: 80,
+      description: 'Sweet corn and cream filled grilled sandwich.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Onion Capsicum Sandwich',
+      category: 'Sandwich',
+      basePrice: 80,
+      description:
+        'Grilled sandwich with crunchy onions, capsicum, and cheese.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Veg Cheese Sandwich',
+      category: 'Sandwich',
+      basePrice: 100,
+      description:
+        'Classic grilled sandwich filled with fresh vegetables and cheese.',
+      isVeg: true,
+      prepTime: 10,
+    },
+    {
+      name: 'Chocolate Sandwich',
+      category: 'Sandwich',
+      basePrice: 110,
+      description: 'Sweet dessert sandwich filled with rich melted chocolate.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Tandoori Veg Sandwich',
+      category: 'Sandwich',
+      basePrice: 120,
+      description: 'Grilled veg sandwich with tandoori spiced spread.',
+      isVeg: true,
+      prepTime: 10,
+    },
+    {
+      name: 'Paneer Tandoori Sandwich',
+      category: 'Sandwich',
+      basePrice: 140,
+      description:
+        'Grilled sandwich loaded with tandoori marinated paneer blocks.',
+      isVeg: true,
+      prepTime: 12,
+    },
+    {
+      name: 'Peri Peri Paneer Sandwich',
+      category: 'Sandwich',
+      basePrice: 140,
+      description: 'Grilled sandwich featuring fiery peri peri paneer.',
+      isVeg: true,
+      prepTime: 12,
+    },
     {
       name: 'Burger Sandwich',
       category: 'Sandwich',
@@ -348,23 +453,129 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     },
 
     // --- Pizza ---
-    { name: 'Cheese Chilli Pizza', category: 'Pizza', basePrice: 100, description: 'Pizza topped with warm cheese and spicy green chillies.', isVeg: true, prepTime: 15 },
-    { name: 'Margherita Pizza', category: 'Pizza', basePrice: 110, description: 'Classic Italian pizza with simple cheese and tomato sauce.', isVeg: true, prepTime: 12 },
-    { name: 'Onion Capsicum Pizza', category: 'Pizza', basePrice: 110, description: 'Pizza topped with red onions and green capsicum.', isVeg: true, prepTime: 15 },
-    { name: 'Tomato Onion Pizza', category: 'Pizza', basePrice: 110, description: 'Topped with fresh tomato slices and chopped onions.', isVeg: true, prepTime: 15 },
-    { name: 'Double Cheese Pizza', category: 'Pizza', basePrice: 120, description: 'Extra loaded mozzarella cheese pizza.', isVeg: true, prepTime: 15 },
-    { name: 'Golden Corn Pizza', category: 'Pizza', basePrice: 130, description: 'Sweet golden corn pizza with thick cheese base.', isVeg: true, prepTime: 15 },
-    { name: 'Fresh Veggie Pizza', category: 'Pizza', basePrice: 130, description: 'Pizza loaded with a colorful mix of garden-fresh vegetables.', isVeg: true, prepTime: 15 },
-    { name: 'Paneer Tandoori Pizza', category: 'Pizza', basePrice: 140, description: 'Fusion pizza topped with smoky tandoori paneer tikka.', isVeg: true, prepTime: 18 },
-    { name: 'Double Cheese Golden Corn Pizza', category: 'Pizza', basePrice: 140, description: 'Double cheese pizza loaded with golden corn kernels.', isVeg: true, prepTime: 15 },
-    { name: 'Peri Peri Paneer Pizza', category: 'Pizza', basePrice: 150, description: 'Spicy pizza topped with peri peri spiced paneer cubes.', isVeg: true, prepTime: 18 },
+    {
+      name: 'Cheese Chilli Pizza',
+      category: 'Pizza',
+      basePrice: 100,
+      description: 'Pizza topped with warm cheese and spicy green chillies.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Margherita Pizza',
+      category: 'Pizza',
+      basePrice: 110,
+      description: 'Classic Italian pizza with simple cheese and tomato sauce.',
+      isVeg: true,
+      prepTime: 12,
+    },
+    {
+      name: 'Onion Capsicum Pizza',
+      category: 'Pizza',
+      basePrice: 110,
+      description: 'Pizza topped with red onions and green capsicum.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Tomato Onion Pizza',
+      category: 'Pizza',
+      basePrice: 110,
+      description: 'Topped with fresh tomato slices and chopped onions.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Double Cheese Pizza',
+      category: 'Pizza',
+      basePrice: 120,
+      description: 'Extra loaded mozzarella cheese pizza.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Golden Corn Pizza',
+      category: 'Pizza',
+      basePrice: 130,
+      description: 'Sweet golden corn pizza with thick cheese base.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Fresh Veggie Pizza',
+      category: 'Pizza',
+      basePrice: 130,
+      description:
+        'Pizza loaded with a colorful mix of garden-fresh vegetables.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Paneer Tandoori Pizza',
+      category: 'Pizza',
+      basePrice: 140,
+      description: 'Fusion pizza topped with smoky tandoori paneer tikka.',
+      isVeg: true,
+      prepTime: 18,
+    },
+    {
+      name: 'Double Cheese Golden Corn Pizza',
+      category: 'Pizza',
+      basePrice: 140,
+      description: 'Double cheese pizza loaded with golden corn kernels.',
+      isVeg: true,
+      prepTime: 15,
+    },
+    {
+      name: 'Peri Peri Paneer Pizza',
+      category: 'Pizza',
+      basePrice: 150,
+      description: 'Spicy pizza topped with peri peri spiced paneer cubes.',
+      isVeg: true,
+      prepTime: 18,
+    },
 
     // --- Fries ---
-    { name: 'Regular Fries', category: 'Fries', basePrice: 70, description: 'Classic salted potato French fries.', isVeg: true, prepTime: 7 },
-    { name: 'Peri Peri Fries', category: 'Fries', basePrice: 100, description: 'French fries dusted with hot peri peri seasoning.', isVeg: true, prepTime: 7 },
-    { name: 'Chatpata Fries', category: 'Fries', basePrice: 110, description: 'Fries seasoned with tangy Indian chaat masala.', isVeg: true, prepTime: 7 },
-    { name: 'Cheese Peri Peri Fries', category: 'Fries', basePrice: 130, description: 'Peri peri fries drizzled with cheese sauce.', isVeg: true, prepTime: 8 },
-    { name: 'Cheese Chatpata Fries', category: 'Fries', basePrice: 130, description: 'Tangy chatpata fries loaded with melted cheese.', isVeg: true, prepTime: 8 },
+    {
+      name: 'Regular Fries',
+      category: 'Fries',
+      basePrice: 70,
+      description: 'Classic salted potato French fries.',
+      isVeg: true,
+      prepTime: 7,
+    },
+    {
+      name: 'Peri Peri Fries',
+      category: 'Fries',
+      basePrice: 100,
+      description: 'French fries dusted with hot peri peri seasoning.',
+      isVeg: true,
+      prepTime: 7,
+    },
+    {
+      name: 'Chatpata Fries',
+      category: 'Fries',
+      basePrice: 110,
+      description: 'Fries seasoned with tangy Indian chaat masala.',
+      isVeg: true,
+      prepTime: 7,
+    },
+    {
+      name: 'Cheese Peri Peri Fries',
+      category: 'Fries',
+      basePrice: 130,
+      description: 'Peri peri fries drizzled with cheese sauce.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Cheese Chatpata Fries',
+      category: 'Fries',
+      basePrice: 130,
+      description: 'Tangy chatpata fries loaded with melted cheese.',
+      isVeg: true,
+      prepTime: 8,
+    },
     {
       name: 'Cheese Fries (Reg/Melted)',
       category: 'Fries',
@@ -379,17 +590,84 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     },
 
     // --- Maggie ---
-    { name: 'Plain Maggie', category: 'Maggie', basePrice: 60, description: 'Simplicity at its best - classic plain yellow instant noodles.', isVeg: true, prepTime: 7 },
-    { name: 'Masala Maggie', category: 'Maggie', basePrice: 70, description: 'Instant noodles prepared with extra aromatic spices.', isVeg: true, prepTime: 7 },
-    { name: 'Schezwan Maggie', category: 'Maggie', basePrice: 70, description: 'Noodles tossed in spicy schezwan sauce.', isVeg: true, prepTime: 8 },
-    { name: 'Vegetable Maggie', category: 'Maggie', basePrice: 80, description: 'Maggie loaded with fresh green vegetables.', isVeg: true, prepTime: 9 },
-    { name: 'Cheese Maggie', category: 'Maggie', basePrice: 80, description: 'Cheesy instant noodles topped with grated cheese.', isVeg: true, prepTime: 8 },
-    { name: 'Peri Peri Maggie', category: 'Maggie', basePrice: 80, description: 'Instant noodles with a fiery peri peri kick.', isVeg: true, prepTime: 8 },
-    { name: 'Cheese Peri Peri Maggie', category: 'Maggie', basePrice: 100, description: 'Spicy peri peri noodles loaded with cheese.', isVeg: true, prepTime: 9 },
-    { name: 'Peri Peri Paneer Maggie', category: 'Maggie', basePrice: 120, description: 'Premium instant noodles with peri peri spice and paneer chunks.', isVeg: true, prepTime: 10 },
+    {
+      name: 'Plain Maggie',
+      category: 'Maggie',
+      basePrice: 60,
+      description:
+        'Simplicity at its best - classic plain yellow instant noodles.',
+      isVeg: true,
+      prepTime: 7,
+    },
+    {
+      name: 'Masala Maggie',
+      category: 'Maggie',
+      basePrice: 70,
+      description: 'Instant noodles prepared with extra aromatic spices.',
+      isVeg: true,
+      prepTime: 7,
+    },
+    {
+      name: 'Schezwan Maggie',
+      category: 'Maggie',
+      basePrice: 70,
+      description: 'Noodles tossed in spicy schezwan sauce.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Vegetable Maggie',
+      category: 'Maggie',
+      basePrice: 80,
+      description: 'Maggie loaded with fresh green vegetables.',
+      isVeg: true,
+      prepTime: 9,
+    },
+    {
+      name: 'Cheese Maggie',
+      category: 'Maggie',
+      basePrice: 80,
+      description: 'Cheesy instant noodles topped with grated cheese.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Peri Peri Maggie',
+      category: 'Maggie',
+      basePrice: 80,
+      description: 'Instant noodles with a fiery peri peri kick.',
+      isVeg: true,
+      prepTime: 8,
+    },
+    {
+      name: 'Cheese Peri Peri Maggie',
+      category: 'Maggie',
+      basePrice: 100,
+      description: 'Spicy peri peri noodles loaded with cheese.',
+      isVeg: true,
+      prepTime: 9,
+    },
+    {
+      name: 'Peri Peri Paneer Maggie',
+      category: 'Maggie',
+      basePrice: 120,
+      description:
+        'Premium instant noodles with peri peri spice and paneer chunks.',
+      isVeg: true,
+      prepTime: 10,
+    },
 
     // --- Sizzling ---
-    { name: 'Sizzling Brownie', category: 'Sizzling', basePrice: 150, description: 'Decadent sizzling chocolate brownie with ice cream.', isVeg: true, prepTime: 10, popular: true, recommended: true },
+    {
+      name: 'Sizzling Brownie',
+      category: 'Sizzling',
+      basePrice: 150,
+      description: 'Decadent sizzling chocolate brownie with ice cream.',
+      isVeg: true,
+      prepTime: 10,
+      popular: true,
+      recommended: true,
+    },
     {
       name: 'Sizzling Burger',
       category: 'Sizzling',
@@ -406,52 +684,294 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
     },
 
     // --- Freyo Tower ---
-    { name: 'Freyo Tower', category: 'Freyo Tower', basePrice: 180, description: 'Customize Eat and Sip Dish', isVeg: true, prepTime: 15, popular: true, recommended: true, bestSeller: true },
+    {
+      name: 'Freyo Tower',
+      category: 'Freyo Tower',
+      basePrice: 180,
+      description: 'Customize Eat and Sip Dish',
+      isVeg: true,
+      prepTime: 15,
+      popular: true,
+      recommended: true,
+      bestSeller: true,
+    },
 
     // --- Mojito ---
-    { name: 'Lemon Mojito', category: 'Mojito', basePrice: 80, description: 'Classic refreshing lemon and mint mojito.', isVeg: true, prepTime: 5 },
-    { name: 'Green Apple Mojito', category: 'Mojito', basePrice: 100, description: 'Zesty green apple flavor blended with mint and soda.', isVeg: true, prepTime: 5 },
-    { name: 'Pineapple Mojito', category: 'Mojito', basePrice: 100, description: 'Sweet pineapple juice with mint and refreshing soda.', isVeg: true, prepTime: 5 },
-    { name: 'Ocean Blue Mojito', category: 'Mojito', basePrice: 120, description: 'Cool blue curacao syrup with mint, lime, and soda.', isVeg: true, prepTime: 5 },
-    { name: 'Spicy Guava Mojito', category: 'Mojito', basePrice: 120, description: 'Sweet guava juice with a spicy kick of chilli and lime.', isVeg: true, prepTime: 5 },
+    {
+      name: 'Lemon Mojito',
+      category: 'Mojito',
+      basePrice: 80,
+      description: 'Classic refreshing lemon and mint mojito.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Green Apple Mojito',
+      category: 'Mojito',
+      basePrice: 100,
+      description: 'Zesty green apple flavor blended with mint and soda.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Pineapple Mojito',
+      category: 'Mojito',
+      basePrice: 100,
+      description: 'Sweet pineapple juice with mint and refreshing soda.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Ocean Blue Mojito',
+      category: 'Mojito',
+      basePrice: 120,
+      description: 'Cool blue curacao syrup with mint, lime, and soda.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Spicy Guava Mojito',
+      category: 'Mojito',
+      basePrice: 120,
+      description: 'Sweet guava juice with a spicy kick of chilli and lime.',
+      isVeg: true,
+      prepTime: 5,
+    },
 
     // --- Cold Beverages ---
-    { name: 'Reg. Cold Coffee', category: 'Cold Beverages', basePrice: 50, description: 'Regular classic blended cold coffee.', isVeg: true, prepTime: 5 },
-    { name: 'Peach Ice Tea', category: 'Cold Beverages', basePrice: 50, description: 'Chilled iced tea flavored with sweet peach.', isVeg: true, prepTime: 5 },
-    { name: 'Lemon Ice Tea', category: 'Cold Beverages', basePrice: 50, description: 'Refreshing iced tea infused with lemon juice.', isVeg: true, prepTime: 5 },
-    { name: 'Thick Cold Coffee', category: 'Cold Beverages', basePrice: 60, description: 'Thick and creamy blended cold coffee.', isVeg: true, prepTime: 5 },
-    { name: 'Thick Cold Coffee with Crush', category: 'Cold Beverages', basePrice: 70, description: 'Thick cold coffee with chocolate/cookie crush.', isVeg: true, prepTime: 5 },
-    { name: 'Chocolate Cold Coffee', category: 'Cold Beverages', basePrice: 70, description: 'Rich chocolate flavored cold coffee.', isVeg: true, prepTime: 5 },
-    { name: 'Irish Cold Coffee', category: 'Cold Beverages', basePrice: 80, description: 'Aromatic cold coffee with Irish cream syrup.', isVeg: true, prepTime: 6 },
-    { name: 'Caramel Coffee', category: 'Cold Beverages', basePrice: 80, description: 'Creamy cold coffee blended with sweet caramel sauce.', isVeg: true, prepTime: 6 },
-    { name: 'Hazelnut Cold Coffee', category: 'Cold Beverages', basePrice: 90, description: 'Hazelnut syrup infused cold coffee blend.', isVeg: true, prepTime: 6 },
-    { name: 'Chocolate Cold Coffee with Crush', category: 'Cold Beverages', basePrice: 90, description: 'Chocolate cold coffee with cookie crush.', isVeg: true, prepTime: 6 },
+    {
+      name: 'Reg. Cold Coffee',
+      category: 'Cold Beverages',
+      basePrice: 50,
+      description: 'Regular classic blended cold coffee.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Peach Ice Tea',
+      category: 'Cold Beverages',
+      basePrice: 50,
+      description: 'Chilled iced tea flavored with sweet peach.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Lemon Ice Tea',
+      category: 'Cold Beverages',
+      basePrice: 50,
+      description: 'Refreshing iced tea infused with lemon juice.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Thick Cold Coffee',
+      category: 'Cold Beverages',
+      basePrice: 60,
+      description: 'Thick and creamy blended cold coffee.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Thick Cold Coffee with Crush',
+      category: 'Cold Beverages',
+      basePrice: 70,
+      description: 'Thick cold coffee with chocolate/cookie crush.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Chocolate Cold Coffee',
+      category: 'Cold Beverages',
+      basePrice: 70,
+      description: 'Rich chocolate flavored cold coffee.',
+      isVeg: true,
+      prepTime: 5,
+    },
+    {
+      name: 'Irish Cold Coffee',
+      category: 'Cold Beverages',
+      basePrice: 80,
+      description: 'Aromatic cold coffee with Irish cream syrup.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Caramel Coffee',
+      category: 'Cold Beverages',
+      basePrice: 80,
+      description: 'Creamy cold coffee blended with sweet caramel sauce.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Hazelnut Cold Coffee',
+      category: 'Cold Beverages',
+      basePrice: 90,
+      description: 'Hazelnut syrup infused cold coffee blend.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Chocolate Cold Coffee with Crush',
+      category: 'Cold Beverages',
+      basePrice: 90,
+      description: 'Chocolate cold coffee with cookie crush.',
+      isVeg: true,
+      prepTime: 6,
+    },
 
     // --- Hot Beverage ---
-    { name: 'Black Coffee', category: 'Hot Beverage', basePrice: 25, description: 'Strong freshly brewed black coffee.', isVeg: true, prepTime: 4 },
-    { name: 'Green Tea', category: 'Hot Beverage', basePrice: 30, description: 'Healthy and refreshing steamed green tea leaves.', isVeg: true, prepTime: 4 },
-    { name: 'Hot Coffee', category: 'Hot Beverage', basePrice: 30, description: 'Classic hot milk coffee.', isVeg: true, prepTime: 4 },
-    { name: 'Lemon Tea', category: 'Hot Beverage', basePrice: 30, description: 'Charmed hot tea with a squeeze of fresh lemon.', isVeg: true, prepTime: 4 },
-    { name: 'Hot Chocolate', category: 'Hot Beverage', basePrice: 70, description: 'Rich, warm, and creamy chocolate milk drink.', isVeg: true, prepTime: 6 },
+    {
+      name: 'Black Coffee',
+      category: 'Hot Beverage',
+      basePrice: 25,
+      description: 'Strong freshly brewed black coffee.',
+      isVeg: true,
+      prepTime: 4,
+    },
+    {
+      name: 'Green Tea',
+      category: 'Hot Beverage',
+      basePrice: 30,
+      description: 'Healthy and refreshing steamed green tea leaves.',
+      isVeg: true,
+      prepTime: 4,
+    },
+    {
+      name: 'Hot Coffee',
+      category: 'Hot Beverage',
+      basePrice: 30,
+      description: 'Classic hot milk coffee.',
+      isVeg: true,
+      prepTime: 4,
+    },
+    {
+      name: 'Lemon Tea',
+      category: 'Hot Beverage',
+      basePrice: 30,
+      description: 'Charmed hot tea with a squeeze of fresh lemon.',
+      isVeg: true,
+      prepTime: 4,
+    },
+    {
+      name: 'Hot Chocolate',
+      category: 'Hot Beverage',
+      basePrice: 70,
+      description: 'Rich, warm, and creamy chocolate milk drink.',
+      isVeg: true,
+      prepTime: 6,
+    },
 
     // --- Chocolate Fun ---
-    { name: 'White Chocolate', category: 'Chocolate Fun', basePrice: 80, description: 'Blended milk beverage with sweet white chocolate.', isVeg: true, prepTime: 6 },
-    { name: 'Oreo Shake', category: 'Chocolate Fun', basePrice: 100, description: 'Milkshake blended with crunchy Oreo cookies.', isVeg: true, prepTime: 6 },
-    { name: 'Kitkat Shake', category: 'Chocolate Fun', basePrice: 100, description: 'Blended milkshake with KitKat wafer bars.', isVeg: true, prepTime: 6 },
-    { name: 'Day Night Chocolate', category: 'Chocolate Fun', basePrice: 100, description: 'Special blend of white and dark chocolate beverage.', isVeg: true, prepTime: 6 },
+    {
+      name: 'White Chocolate',
+      category: 'Chocolate Fun',
+      basePrice: 80,
+      description: 'Blended milk beverage with sweet white chocolate.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Oreo Shake',
+      category: 'Chocolate Fun',
+      basePrice: 100,
+      description: 'Milkshake blended with crunchy Oreo cookies.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Kitkat Shake',
+      category: 'Chocolate Fun',
+      basePrice: 100,
+      description: 'Blended milkshake with KitKat wafer bars.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Day Night Chocolate',
+      category: 'Chocolate Fun',
+      basePrice: 100,
+      description: 'Special blend of white and dark chocolate beverage.',
+      isVeg: true,
+      prepTime: 6,
+    },
 
     // --- Milkshakes ---
-    { name: 'Mango', category: 'Milkshakes', basePrice: 80, description: 'Sweet and creamy mango milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Butterscotch', category: 'Milkshakes', basePrice: 80, description: 'Rich butterscotch shake with crunchies.', isVeg: true, prepTime: 6 },
-    { name: 'Vanilla', category: 'Milkshakes', basePrice: 80, description: 'Smooth classic vanilla milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Strawberry', category: 'Milkshakes', basePrice: 80, description: 'Creamy and refreshing strawberry milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Pineapple', category: 'Milkshakes', basePrice: 80, description: 'Sweet pineapple milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Rose', category: 'Milkshakes', basePrice: 100, description: 'Sweet fragrant rose syrup milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Chocolate', category: 'Milkshakes', basePrice: 100, description: 'All-time favorite chocolate milkshake.', isVeg: true, prepTime: 6 },
-    { name: 'Pista', category: 'Milkshakes', basePrice: 100, description: 'Milkshake flavored with rich pistachio nuts.', isVeg: true, prepTime: 6 },
+    {
+      name: 'Mango',
+      category: 'Milkshakes',
+      basePrice: 80,
+      description: 'Sweet and creamy mango milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Butterscotch',
+      category: 'Milkshakes',
+      basePrice: 80,
+      description: 'Rich butterscotch shake with crunchies.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Vanilla',
+      category: 'Milkshakes',
+      basePrice: 80,
+      description: 'Smooth classic vanilla milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Strawberry',
+      category: 'Milkshakes',
+      basePrice: 80,
+      description: 'Creamy and refreshing strawberry milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Pineapple',
+      category: 'Milkshakes',
+      basePrice: 80,
+      description: 'Sweet pineapple milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Rose',
+      category: 'Milkshakes',
+      basePrice: 100,
+      description: 'Sweet fragrant rose syrup milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Chocolate',
+      category: 'Milkshakes',
+      basePrice: 100,
+      description: 'All-time favorite chocolate milkshake.',
+      isVeg: true,
+      prepTime: 6,
+    },
+    {
+      name: 'Pista',
+      category: 'Milkshakes',
+      basePrice: 100,
+      description: 'Milkshake flavored with rich pistachio nuts.',
+      isVeg: true,
+      prepTime: 6,
+    },
   ];
 
-  const foodCategories = new Set(['Pizza', 'Burger', 'Sandwich', 'Momos', 'Fries', 'Maggie', 'Freyo Tower']);
+  const foodCategories = new Set([
+    'Pizza',
+    'Burger',
+    'Sandwich',
+    'Momos',
+    'Fries',
+    'Maggie',
+    'Freyo Tower',
+  ]);
 
   for (let i = 0; i < menuItems.length; i++) {
     const itemData = menuItems[i];
@@ -532,4 +1052,20 @@ export async function seedDatabaseIfEmpty(prisma: PrismaClient) {
   }
 
   console.log('Database seeding completed successfully!');
+}
+
+if (require.main === module) {
+  const prisma = new PrismaClient();
+
+  seedDatabaseIfEmpty(prisma)
+    .then(() => {
+      console.log('Seed process finished successfully.');
+    })
+    .catch((error) => {
+      console.error('Seed process failed:', error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }

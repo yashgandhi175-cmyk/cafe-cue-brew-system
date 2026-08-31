@@ -408,7 +408,8 @@ export class MenuService {
         const multiplier = action === 'INCREASE' ? 1 : -1;
 
         if (updateType === 'PERCENTAGE') {
-          newBasePrice = basePriceNum + basePriceNum * (value / 100) * multiplier;
+          newBasePrice =
+            basePriceNum + basePriceNum * (value / 100) * multiplier;
         } else {
           newBasePrice = basePriceNum + value * multiplier;
         }
@@ -424,7 +425,8 @@ export class MenuService {
           const varPriceNum = Number(variant.price);
           let newVarPrice = varPriceNum;
           if (updateType === 'PERCENTAGE') {
-            newVarPrice = varPriceNum + varPriceNum * (value / 100) * multiplier;
+            newVarPrice =
+              varPriceNum + varPriceNum * (value / 100) * multiplier;
           } else {
             newVarPrice = varPriceNum + value * multiplier;
           }

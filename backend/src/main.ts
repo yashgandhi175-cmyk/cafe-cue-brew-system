@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { GlobalHttpExceptionFilter } from './common/http-exception.filter';
 
 process.on('uncaughtException', (err) => {
   console.error('CRITICAL UNCAUGHT EXCEPTION:', err);
@@ -16,7 +17,9 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('SIGTERM', () => {
-  console.log('Received SIGTERM signal. Application is shutting down gracefully...');
+  console.log(
+    'Received SIGTERM signal. Application is shutting down gracefully...',
+  );
 });
 
 process.on('exit', (code) => {
@@ -38,12 +41,15 @@ async function bootstrap() {
       if (rawPassword && !rawPassword.includes('%')) {
         const encodedPassword = encodeURIComponent(rawPassword);
         dbUrl = `${prefix}${encodedPassword}${suffix}`;
-        console.log('Sanitized DATABASE_URL password format for Prisma compatibility.');
+        console.log(
+          'Sanitized DATABASE_URL password format for Prisma compatibility.',
+        );
       }
     }
     if (!dbUrl.includes('connection_limit')) {
       const separator = dbUrl.includes('?') ? '&' : '?';
-      dbUrl += `${separator}connection_limit=25&connect_timeout=10&pool_timeout=10`;
+      // Kept low because shared hosting MySQL plans often cap total connections around 20-25 for the entire account — this app should not consume most of that quota by itself.
+      dbUrl += `${separator}connection_limit=5&connect_timeout=10&pool_timeout=10`;
     }
     process.env.DATABASE_URL = dbUrl;
   } else {
@@ -52,14 +58,21 @@ async function bootstrap() {
 
   console.log('[BOOTSTRAP STEP 3/6] Initializing NestFactory AppModule...');
   const app = await NestFactory.create(AppModule);
-  console.log('[BOOTSTRAP STEP 4/6] NestFactory AppModule created successfully.');
+  console.log(
+    '[BOOTSTRAP STEP 4/6] NestFactory AppModule created successfully.',
+  );
 
   const configService = app.get(ConfigService);
 
-  console.log('[BOOTSTRAP STEP 5/6] Setting up CORS, validation pipes, and API prefix...');
+  console.log(
+    '[BOOTSTRAP STEP 5/6] Setting up CORS, validation pipes, and API prefix...',
+  );
   // Enable CORS
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       if (!origin) return callback(null, true);
       const frontendUrl = configService.get<string>('FRONTEND_URL');
       const allowed = [
@@ -70,10 +83,18 @@ async function bootstrap() {
         frontendUrl,
       ].filter(Boolean);
 
-      if (allowed.some((a) => a && (origin === a || origin.startsWith('https://cafecuebrew.com') || origin.endsWith('.cafecuebrew.com')))) {
+      if (
+        allowed.some(
+          (a) =>
+            a &&
+            (origin === a ||
+              origin.startsWith('https://cafecuebrew.com') ||
+              origin.endsWith('.cafecuebrew.com')),
+        )
+      ) {
         return callback(null, true);
       }
-      return callback(null, true);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -83,24 +104,44 @@ async function bootstrap() {
   // Set global API prefix
   app.setGlobalPrefix('api');
 
+  // Add native security headers middleware
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+  });
+
   // Enable global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
+      forbidNonWhitelisted: true,
     }),
   );
+
+  // Enable global exception filter to prevent internal database info leakage
+  app.useGlobalFilters(new GlobalHttpExceptionFilter());
 
   // Enable shutdown hooks for graceful exit and database pool disconnect
   app.enableShutdownHooks();
 
   const port = process.env.PORT || 3000;
-  console.log(`[BOOTSTRAP STEP 6/6] Binding server listener to 0.0.0.0:${port}...`);
+  console.log(
+    `[BOOTSTRAP STEP 6/6] Binding server listener to 0.0.0.0:${port}...`,
+  );
   await app.listen(port, '0.0.0.0');
-  console.log(`[BOOTSTRAP SUCCESS] Server actively listening on 0.0.0.0:${port}`);
+  console.log(
+    `[BOOTSTRAP SUCCESS] Server actively listening on 0.0.0.0:${port}`,
+  );
 }
 
 bootstrap().catch((err) => {
-  console.error('[BOOTSTRAP FATAL ERROR] Application failed during startup:', err);
+  console.error(
+    '[BOOTSTRAP FATAL ERROR] Application failed during startup:',
+    err,
+  );
   process.exit(1);
 });

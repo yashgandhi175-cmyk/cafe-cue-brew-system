@@ -10,16 +10,13 @@ describe('MySQL Database Integration Tests & Safety Guards', () => {
   let ordersService: OrdersService | null = null;
   let moduleFixture: TestingModule | null = null;
 
-  const isTestEnv = process.env.NODE_ENV === 'test';
   const testDbUrl = process.env.TEST_DATABASE_URL;
   const prodDbUrl = process.env.DATABASE_URL || '';
 
   beforeAll(async () => {
     // 1. Safety Guard: Integration tests must refuse to run if TEST_DATABASE_URL is missing under NODE_ENV=test
     if (!testDbUrl) {
-      console.log(
-        'MYSQL PHASE 8C: NOT RUN — TEST DATABASE NOT CONFIGURED',
-      );
+      console.log('MYSQL PHASE 8C: NOT RUN — TEST DATABASE NOT CONFIGURED');
       console.warn(
         '⚠️  [SAFETY GUARD] TEST_DATABASE_URL is missing. Skipping MySQL integration tests.',
       );
@@ -76,7 +73,7 @@ describe('MySQL Database Integration Tests & Safety Guards', () => {
     // Test a basic query to prove database connection and query capabilities
     const result = await prisma.$queryRaw`SELECT 1 + 1 as sum`;
     expect(result).toBeDefined();
-    expect((result as { sum: number }[])[0].sum).toBe(2);
+    expect(Number((result as { sum: number | bigint }[])[0].sum)).toBe(2);
   });
 
   it('Verify negative loyalty reversal balance failure path', async () => {

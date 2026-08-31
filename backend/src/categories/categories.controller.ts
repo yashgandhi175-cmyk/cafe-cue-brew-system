@@ -29,12 +29,16 @@ export class CategoriesController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findAll(@Query('all') all?: string) {
     const includeInactive = all === 'true';
     return this.categoriesService.findAll(includeInactive);
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.OWNER, Role.MANAGER, Role.CASHIER, Role.WAITER)
   findOne(@Param('id') id: string) {
     return this.categoriesService.findOne(id);
   }

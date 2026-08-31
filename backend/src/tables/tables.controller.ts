@@ -63,8 +63,15 @@ export class TablesController {
   }
 
   @Get('token/:token')
-  findByToken(@Param('token') token: string) {
-    return this.tablesService.findByToken(token);
+  async findByToken(@Param('token') token: string) {
+    const table = await this.tablesService.findByToken(token);
+    return {
+      id: table.id,
+      tableNumber: table.tableNumber,
+      capacity: table.capacity,
+      status: table.status,
+      isActive: table.isActive,
+    };
   }
 
   @Put(':id')

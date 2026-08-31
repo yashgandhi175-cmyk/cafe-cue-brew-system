@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { SettlementStatus, CreditType, PaymentMethod } from '@prisma/client';
 
@@ -43,7 +47,9 @@ export class CreditsService {
     return customers
       .map((customer) => {
         const ledgers = customer.creditLedgers;
-        const activeLedgers = ledgers.filter((l) => l.settlementStatus !== 'PAID');
+        const activeLedgers = ledgers.filter(
+          (l) => l.settlementStatus !== 'PAID',
+        );
         if (ledgers.length === 0) return null;
 
         const outstandingAmount = activeLedgers.reduce(
@@ -85,7 +91,12 @@ export class CreditsService {
           openInvoicesCount: activeLedgers.length,
           overdueDays: maxOverdueDays,
           lastPaymentDate,
-          status: overdueAmount > 0 ? 'OVERDUE' : (outstandingAmount > 0 ? 'ACTIVE' : 'CLEARED'),
+          status:
+            overdueAmount > 0
+              ? 'OVERDUE'
+              : outstandingAmount > 0
+                ? 'ACTIVE'
+                : 'CLEARED',
         };
       })
       .filter(Boolean);
@@ -138,7 +149,10 @@ export class CreditsService {
         if (ledger.dueDate && ledger.dueDate < now) {
           overdueAmount += ledgerOutstanding;
         }
-        if (ledger.dueDate && (!oldestDueDate || ledger.dueDate < oldestDueDate)) {
+        if (
+          ledger.dueDate &&
+          (!oldestDueDate || ledger.dueDate < oldestDueDate)
+        ) {
           oldestDueDate = ledger.dueDate;
         }
       }
@@ -160,7 +174,9 @@ export class CreditsService {
           lastPaymentDate = pDate;
         }
 
-        const diffTime = Math.abs(pDate.getTime() - ledger.invoiceDate.getTime());
+        const diffTime = Math.abs(
+          pDate.getTime() - ledger.invoiceDate.getTime(),
+        );
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         totalPeriodDays += diffDays;
         paidCount++;
@@ -171,25 +187,39 @@ export class CreditsService {
           description: `Received payment of ₹${payment.amount} via ${payment.method} against ${ledger.invoiceNumber}`,
           amount: Number(payment.amount),
           receivedBy: payment.receivedBy?.name || 'Staff',
-          meta: { paymentId: payment.id, ledgerId: ledger.id, invoiceNumber: ledger.invoiceNumber },
+          meta: {
+            paymentId: payment.id,
+            ledgerId: ledger.id,
+            invoiceNumber: ledger.invoiceNumber,
+          },
         });
       });
     });
 
     timeline.sort((a, b) => b.date.getTime() - a.date.getTime());
 
-    const openInvoicesCount = customer.creditLedgers.filter((l) => l.settlementStatus !== 'PAID').length;
-    const averageCollectionDays = paidCount > 0 ? Math.round(totalPeriodDays / paidCount) : 0;
+    const openInvoicesCount = customer.creditLedgers.filter(
+      (l) => l.settlementStatus !== 'PAID',
+    ).length;
+    const averageCollectionDays =
+      paidCount > 0 ? Math.round(totalPeriodDays / paidCount) : 0;
     const creditLimit = 50000;
     const availableCredit = Math.max(0, creditLimit - totalOutstanding);
 
     const invoices = customer.creditLedgers.map((l) => {
-      const creditPaymentsSum = (l.payments || []).reduce((sum, p) => sum + Number(p.amount), 0);
+      const creditPaymentsSum = (l.payments || []).reduce(
+        (sum, p) => sum + Number(p.amount),
+        0,
+      );
       const paidAmount = creditPaymentsSum;
-      const isOverdue = l.dueDate ? now > new Date(l.dueDate) && l.settlementStatus !== 'PAID' : false;
+      const isOverdue = l.dueDate
+        ? now > new Date(l.dueDate) && l.settlementStatus !== 'PAID'
+        : false;
       let daysOverdue = 0;
       if (isOverdue && l.dueDate) {
-        const diffTime = Math.abs(now.getTime() - new Date(l.dueDate).getTime());
+        const diffTime = Math.abs(
+          now.getTime() - new Date(l.dueDate).getTime(),
+        );
         daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       }
 
@@ -240,7 +270,9 @@ export class CreditsService {
     staffId: string,
   ) {
     if (amount <= 0) {
-      throw new BadRequestException('Payment amount must be greater than zero.');
+      throw new BadRequestException(
+        'Payment amount must be greater than zero.',
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -256,20 +288,25 @@ export class CreditsService {
 
         const outstanding = Number(ledger.outstandingAmount);
         if (outstanding <= 0) {
-          throw new BadRequestException('This invoice has already been fully paid.');
+          throw new BadRequestException(
+            'This invoice has already been fully paid.',
+          );
         }
 
         // Idempotency Check: Return existing credit payment if duplicate request received within 15 seconds
-        const recentCreditPayment = (typeof tx.creditPayment?.findFirst === 'function')
-          ? await tx.creditPayment.findFirst({
-              where: {
-                creditLedgerId: ledger.id,
-                method,
-                amount,
-                paidAt: { gte: new Date(Date.now() - 15000) },
-              },
-            }).catch(() => null)
-          : null;
+        const recentCreditPayment =
+          typeof tx.creditPayment?.findFirst === 'function'
+            ? await tx.creditPayment
+                .findFirst({
+                  where: {
+                    creditLedgerId: ledger.id,
+                    method,
+                    amount,
+                    paidAt: { gte: new Date(Date.now() - 15000) },
+                  },
+                })
+                .catch(() => null)
+            : null;
         if (recentCreditPayment) {
           return [recentCreditPayment];
         }
@@ -281,7 +318,8 @@ export class CreditsService {
         }
 
         const newOutstanding = Math.max(0, outstanding - amount);
-        const nextStatus: SettlementStatus = newOutstanding === 0 ? 'PAID' : 'PARTIAL';
+        const nextStatus: SettlementStatus =
+          newOutstanding === 0 ? 'PAID' : 'PARTIAL';
 
         const payment = await tx.creditPayment.create({
           data: {
@@ -317,12 +355,16 @@ export class CreditsService {
           if (bill.tableSessionId) {
             await tx.order.updateMany({
               where: { tableSessionId: bill.tableSessionId },
-              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+              data: {
+                paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              },
             });
           } else if (bill.orderId) {
             await tx.order.update({
               where: { id: bill.orderId },
-              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+              data: {
+                paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              },
             });
           }
         }
@@ -349,12 +391,16 @@ export class CreditsService {
       // MODE B: Total Pay (FIFO Distribution across customer's open invoices)
       let targetCustomerId = customerId;
       if (!targetCustomerId && ledgerId) {
-        const singleL = await tx.creditLedger.findUnique({ where: { id: ledgerId } });
+        const singleL = await tx.creditLedger.findUnique({
+          where: { id: ledgerId },
+        });
         if (singleL) targetCustomerId = singleL.customerId;
       }
 
       if (!targetCustomerId) {
-        throw new BadRequestException('Customer ID is required to process total payment.');
+        throw new BadRequestException(
+          'Customer ID is required to process total payment.',
+        );
       }
 
       const activeLedgers = await tx.creditLedger.findMany({
@@ -362,14 +408,13 @@ export class CreditsService {
           customerId: targetCustomerId,
           settlementStatus: { in: ['UNPAID', 'PARTIAL'] },
         },
-        orderBy: [
-          { dueDate: 'asc' },
-          { invoiceDate: 'asc' },
-        ],
+        orderBy: [{ dueDate: 'asc' }, { invoiceDate: 'asc' }],
       });
 
       if (activeLedgers.length === 0) {
-        throw new BadRequestException('This customer has no outstanding credit invoices.');
+        throw new BadRequestException(
+          'This customer has no outstanding credit invoices.',
+        );
       }
 
       const totalCustomerOutstanding = activeLedgers.reduce(
@@ -392,7 +437,8 @@ export class CreditsService {
         const ledgerOutstanding = Number(ledger.outstandingAmount);
         const allocateAmount = Math.min(remainingToAllocate, ledgerOutstanding);
         const newOutstanding = Math.max(0, ledgerOutstanding - allocateAmount);
-        const nextStatus: SettlementStatus = newOutstanding === 0 ? 'PAID' : 'PARTIAL';
+        const nextStatus: SettlementStatus =
+          newOutstanding === 0 ? 'PAID' : 'PARTIAL';
 
         const payment = await tx.creditPayment.create({
           data: {
@@ -429,12 +475,16 @@ export class CreditsService {
           if (bill.tableSessionId) {
             await tx.order.updateMany({
               where: { tableSessionId: bill.tableSessionId },
-              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+              data: {
+                paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              },
             });
           } else if (bill.orderId) {
             await tx.order.update({
               where: { id: bill.orderId },
-              data: { paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL' },
+              data: {
+                paymentStatus: nextStatus === 'PAID' ? 'PAID' : 'PARTIAL',
+              },
             });
           }
         }
@@ -465,7 +515,11 @@ export class CreditsService {
   // 4. Get Credit & Aging Analytics for Dashboard
   async getCreditAnalytics() {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
 
     // Start of last 7 days
     const startOfWeek = new Date();
@@ -534,12 +588,19 @@ export class CreditsService {
     );
 
     // Overdue Customers Count
-    const overdueLedgers = activeLedgers.filter((l) => l.dueDate && l.dueDate < now);
-    const overdueCustomersSet = new Set(overdueLedgers.map((l) => l.customerId));
+    const overdueLedgers = activeLedgers.filter(
+      (l) => l.dueDate && l.dueDate < now,
+    );
+    const overdueCustomersSet = new Set(
+      overdueLedgers.map((l) => l.customerId),
+    );
     const overdueCustomers = overdueCustomersSet.size;
 
     // Largest Outstanding Customer
-    const customerOutstandingMap: Record<string, { name: string; outstanding: number }> = {};
+    const customerOutstandingMap: Record<
+      string,
+      { name: string; outstanding: number }
+    > = {};
     activeLedgers.forEach((l) => {
       const cId = l.customerId;
       if (!customerOutstandingMap[cId]) {
@@ -581,7 +642,8 @@ export class CreditsService {
       }
     });
 
-    const averageCreditPeriod = paidCount > 0 ? Math.round(totalPeriodDays / paidCount) : 0;
+    const averageCreditPeriod =
+      paidCount > 0 ? Math.round(totalPeriodDays / paidCount) : 0;
 
     // Build summary map for dashboard charts
     const customerSummaries = Object.entries(customerOutstandingMap).map(

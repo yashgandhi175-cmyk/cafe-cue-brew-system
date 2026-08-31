@@ -29,3 +29,17 @@ yarn-error.log*
 
 # Uploads folder (user uploaded content)
 backend/uploads/
+
+# Laravel backend ignores
+laravel-backend/.env
+laravel-backend/vendor/
+laravel-backend/storage/*.key
+
+
+# Production backup/extracted deployment copy
+laravel-backend-production/
+laravel-backend-production.zip
+
+# Backend environment backups
+backend/.env.backup
+backend/.env.hostinger-backup

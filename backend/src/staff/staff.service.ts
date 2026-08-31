@@ -3,6 +3,8 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -138,19 +140,52 @@ export class StaffService {
 
     const staff = await this.findOneWithPinHash(id);
 
+    // Check account lock
+    if (staff.lockedUntil && staff.lockedUntil > new Date()) {
+      const remainingMs = staff.lockedUntil.getTime() - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / (60 * 1000));
+      throw new ForbiddenException(
+        `Account is temporarily locked. Try again in ${remainingMinutes} minute(s).`,
+      );
+    }
+
+    // Load security settings for failed attempt limit and lockout duration
+    const settings = await this.prisma.restaurantSettings.findUnique({
+      where: { id: 'default' },
+    });
+    const maxFailedAttempts = settings?.maxFailedAttempts ?? 5;
+    const lockDurationMinutes = settings?.accountLockDuration ?? 15;
+
     const isMatch = await bcrypt.compare(currentPin, staff.pinHash);
     if (!isMatch) {
-      throw new BadRequestException('Incorrect current PIN');
+      const result = await this.incrementFailedAttempts(
+        staff.id,
+        maxFailedAttempts,
+        lockDurationMinutes,
+      );
+
+      if (result && result.lockedUntil) {
+        throw new UnauthorizedException(
+          `Incorrect current PIN. Too many failed attempts. Account locked for ${lockDurationMinutes} minutes.`,
+        );
+      } else {
+        const remaining = maxFailedAttempts - (result?.attempts ?? 0);
+        throw new UnauthorizedException(
+          `Incorrect current PIN. ${remaining} attempt(s) remaining.`,
+        );
+      }
     }
 
     const pinHash = await bcrypt.hash(newPin, 10);
 
-    // Update PIN and mark mustChangePin as false
+    // Update PIN, clear failed attempts and lockouts, set mustChangePin to false
     await this.prisma.staff.update({
       where: { id },
       data: {
         pinHash,
         mustChangePin: false,
+        failedAttempts: 0,
+        lockedUntil: null,
       },
     });
 

@@ -2,6 +2,8 @@
 
 This guide outlines the complete step-by-step process to deploy the **Cafe Cue & Brew Restaurant Management System** to GitHub and then host it on **Hostinger Business Hosting**.
 
+> **Process Budget Note**: This stack should only ever run **ONE** persistent Node.js process on Hostinger (the NestJS backend). The Next.js frontend is configured for static export (`output: 'export'`) and must be uploaded as static HTML/JS/CSS files directly into `public_html/`. It must **never** be deployed as a second Node.js application in Hostinger hPanel.
+
 ---
 
 ## Part 1: Push Code to GitHub
@@ -57,7 +59,7 @@ On the Hostinger file manager (or via local file edits before upload), create a 
 
 ```ini
 # Production connection string (replace with Hostinger credentials)
-DATABASE_URL="mysql://u123456789_db_user:YOUR_DB_PASSWORD@localhost:3306/u123456789_cafe_cue_brew"
+DATABASE_URL="mysql://u123456789_db_user:YOUR_DB_PASSWORD@localhost:3306/u123456789_cafe_cue_brew?connection_limit=5&connect_timeout=10&pool_timeout=10"
 
 # JWT configuration
 JWT_SECRET="YOUR_SECURE_JWT_SECRET_STRING"
@@ -116,38 +118,32 @@ Using **Hostinger File Manager** or **FTP (FileZilla)**, upload the contents of 
 
 ---
 
-## Part 4: Deploy Frontend (Next.js App)
+## Part 4: Deploy Frontend (Static Export)
 
-### Step 1: Configure API Endpoint
-Edit `frontend/.env` to point to the production NestJS backend URL:
+> **IMPORTANT**: Do NOT create a Node.js application in Hostinger hPanel for the frontend. The frontend compiles to static HTML/CSS/JS files and is served directly by Hostinger's web server (Apache/LiteSpeed).
+
+### Step 1: Configure Production API URL
+Before building, configure the backend API URL in `frontend/.env.production` (or `.env.local`):
 
 ```ini
 NEXT_PUBLIC_API_URL="https://api.yourrestaurant.com"
 ```
 
-### Step 2: Build the Frontend Code
-Locally, build the production Next.js application:
+### Step 2: Build the Static Export
+Locally inside `e:/cafe-cue-brew-system/frontend`, run:
 
 ```bash
-# Inside e:/cafe-cue-brew-system/frontend
+npm install
 npm run build
 ```
-This compiles the pages and styling assets into the `.next/` directory.
 
-### Step 3: Upload Files to Hostinger
-Upload the frontend files to the web server directory (e.g., `/home/username/public_html/`):
-* **Upload**: `.next/`, `public/`, `package.json`, `package-lock.json`, and `.env`.
+Because `frontend/next.config.ts` is configured with `output: 'export'`, this produces a static `out/` folder containing static `index.html` and assets (NOT `.next/`).
 
-### Step 4: Configure Frontend Node.js App
-1. In Hostinger hPanel, go to **Websites** > **Node.js** and configure a second Node.js app:
-   * **App Directory**: `public_html/`
-   * **Domain**: `yourrestaurant.com`
-   * **Startup File**: Node.js default loader for Next.js (`node_modules/next/dist/bin/next` with `start` arguments, or standard custom `server.js` wrapper).
-2. Run SSH install:
-   ```bash
-   cd public_html
-   npm install --production
-   ```
+### Step 3: Upload Static Assets to Hostinger
+Using **Hostinger File Manager** or **FTP (FileZilla)**:
+1. Upload the **contents** of the `frontend/out/` directory directly into Hostinger's `public_html/` (or your domain's document root).
+2. Ensure `index.html` sits directly in the root of `public_html/`.
+3. Do **NOT** upload `node_modules/`, `.next/`, or run any Node.js server commands for the frontend.
 
 ---
 

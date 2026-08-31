@@ -24,6 +24,7 @@ import {
   Coins,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { sendWhatsAppMessage, buildOfferMessage, buildCreditReminderMessage } from '@/lib/whatsapp';
 
 interface TagAssignment {
   tagId: string;
@@ -563,6 +564,16 @@ export default function CustomersPage() {
                       </td>
                       <td className="py-4 px-6 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              const msg = buildOfferMessage(customer.name, 'Special Cafe Offer', 'Exclusive discount on your next visit');
+                              sendWhatsAppMessage(customer.phone, msg);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold rounded-lg transition-colors shadow-xs"
+                            title="Send WhatsApp Offer"
+                          >
+                            Send WhatsApp
+                          </button>
                           <button
                             onClick={() => openProfile(customer)}
                             className="p-1.5 hover:bg-[#8F6A50]/10 rounded-lg text-[#8F6A50] transition-colors"
