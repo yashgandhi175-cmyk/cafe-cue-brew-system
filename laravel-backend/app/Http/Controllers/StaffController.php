@@ -17,6 +17,13 @@ class StaffController extends Controller
         return response()->json(Staff::all());
     }
 
+    public function publicStaff()
+    {
+        $staff = Staff::where('status', 'ACTIVE')
+            ->get(['id', 'name', 'role']);
+        return response()->json($staff);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -53,6 +60,24 @@ class StaffController extends Controller
         $staff->status = 'INACTIVE';
         $staff->save();
         return response()->json(['message' => 'Staff deactivated']);
+    }
+
+    public function changePin(Request $request, $id)
+    {
+        $data = $request->validate([
+            'newPin' => 'nullable|string|min:4|max:6',
+            'pin' => 'nullable|string|min:4|max:6',
+        ]);
+        $newPin = $data['newPin'] ?? $data['pin'] ?? null;
+        if (!$newPin) {
+            return response()->json(['message' => 'New PIN is required', 'statusCode' => 400], 400);
+        }
+        $staff = Staff::find($id);
+        if (!$staff) return response()->json(['message' => 'Staff not found', 'statusCode' => 404], 404);
+        $staff->pinHash = Hash::make($newPin);
+        $staff->mustChangePin = false;
+        $staff->save();
+        return response()->json(['message' => 'Staff PIN updated successfully']);
     }
 
     public function sessions()

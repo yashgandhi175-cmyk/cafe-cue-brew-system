@@ -19,7 +19,19 @@ class JwtAuthenticate
         }
 
         $token = substr($header, 7);
-        $secret = env('JWT_SECRET', 'dev-secret-key');
+        $secret = config('app.jwt_secret') ?? env('JWT_SECRET');
+
+        if (empty($secret)) {
+            if (app()->environment('production')) {
+                return response()->json(['message' => 'Unauthorized: Missing JWT secret configuration in production', 'statusCode' => 500], 500);
+            }
+            $secret = 'dev-secret-key';
+        }
+
+        if (app()->environment('production') && in_array($secret, ['dev-secret-key', 'cafe-cue-brew-super-secret-key-2026'])) {
+            return response()->json(['message' => 'Unauthorized: Insecure default JWT secret cannot be used in production', 'statusCode' => 500], 500);
+        }
+
         $payload = JwtHelper::decodeToken($token, $secret);
 
         if (!$payload || !isset($payload['sub']) || !isset($payload['sid'])) {

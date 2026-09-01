@@ -1,21 +1,41 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
 # Dependency directories
 node_modules/
-
-# Local env files
-.env
-.env.local
-.env.*.local
-
-# NestJS build output
-dist/
+frontend/node_modules/
+vendor/
+laravel-backend/vendor/
 
 # Next.js build output
-.next/
+frontend/.next/
+frontend/out/
 out/
 build/
 
-# TS build info
+# TypeScript build info
 *.tsbuildinfo
+
+# Laravel storage & cache
+laravel-backend/storage/*.key
+laravel-backend/storage/app/public/uploads/*
+laravel-backend/storage/framework/cache/*
+laravel-backend/storage/framework/sessions/*
+laravel-backend/storage/framework/views/*
+laravel-backend/storage/logs/*.log
+laravel-backend/bootstrap/cache/*.php
+.phpunit.result.cache
+
+# Archives & Temporary artifacts
+*.zip
+*.tar.gz
+*.tgz
+*.bak
+*.tmp
+lint_*.txt
+eslint_report.txt
 
 # OS metadata
 .DS_Store
@@ -26,20 +46,3 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Uploads folder (user uploaded content)
-backend/uploads/
-
-# Laravel backend ignores
-laravel-backend/.env
-laravel-backend/vendor/
-laravel-backend/storage/*.key
-
-
-# Production backup/extracted deployment copy
-laravel-backend-production/
-laravel-backend-production.zip
-
-# Backend environment backups
-backend/.env.backup
-backend/.env.hostinger-backup

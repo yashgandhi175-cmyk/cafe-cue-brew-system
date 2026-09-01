@@ -56,29 +56,35 @@ Route::get('/health/ready', function () {
     }
 });
 
-Route::post('/auth/login', [AuthController::class, 'login']);
+Route::get('/staff/public', [StaffController::class, 'publicStaff']);
+
+Route::middleware(['throttle:10,1'])->group(function () {
+    Route::post('/auth/login', [AuthController::class, 'login']);
+});
 
 // Public Menu & QR Ordering
-Route::get('/public/settings', [PublicMenuController::class, 'settings']);
-Route::get('/public/categories', [PublicMenuController::class, 'categories']);
-Route::get('/public/banners', [PublicMenuController::class, 'banners']);
-Route::get('/public/menu', [PublicMenuController::class, 'index']);
+Route::middleware(['throttle:60,1'])->group(function () {
+    Route::get('/public/settings', [PublicMenuController::class, 'settings']);
+    Route::get('/public/categories', [PublicMenuController::class, 'categories']);
+    Route::get('/public/banners', [PublicMenuController::class, 'banners']);
+    Route::get('/public/menu', [PublicMenuController::class, 'index']);
 
-Route::get('/tables/token/{token}', [PublicTableController::class, 'showByToken']);
-Route::get('/public/tables/{token}', [PublicTableController::class, 'showByToken']);
-Route::get('/public/tables/validate', [PublicTableController::class, 'showByToken']);
+    Route::get('/tables/token/{token}', [PublicTableController::class, 'showByToken']);
+    Route::get('/public/tables/{token}', [PublicTableController::class, 'showByToken']);
+    Route::get('/public/tables/validate', [PublicTableController::class, 'showByToken']);
 
-Route::post('/public/tables/{tableId}/call-waiter', [WaiterCallController::class, 'store']);
+    Route::post('/public/tables/{tableId}/call-waiter', [WaiterCallController::class, 'store']);
 
-Route::post('/public/orders', [PublicOrderController::class, 'store']);
-Route::get('/public/orders/track/{trackingToken}', [PublicOrderController::class, 'track']);
-Route::get('/public/orders/active-token/{tableId}', [PublicOrderController::class, 'activeToken']);
-Route::get('/public/orders/cart/{tableId}', [PublicOrderController::class, 'getCart']);
-Route::post('/public/orders/cart/{tableId}', [PublicOrderController::class, 'updateCart']);
-Route::put('/public/orders/cart/{tableId}', [PublicOrderController::class, 'syncCart']);
-Route::delete('/public/orders/cart/{tableId}', [PublicOrderController::class, 'clearCart']);
+    Route::post('/public/orders', [PublicOrderController::class, 'store']);
+    Route::get('/public/orders/track/{trackingToken}', [PublicOrderController::class, 'track']);
+    Route::get('/public/orders/active-token/{tableId}', [PublicOrderController::class, 'activeToken']);
+    Route::get('/public/orders/cart/{tableId}', [PublicOrderController::class, 'getCart']);
+    Route::post('/public/orders/cart/{tableId}', [PublicOrderController::class, 'updateCart']);
+    Route::put('/public/orders/cart/{tableId}', [PublicOrderController::class, 'syncCart']);
+    Route::delete('/public/orders/cart/{tableId}', [PublicOrderController::class, 'clearCart']);
 
-Route::post('/billing/coupons/validate', [BillController::class, 'validateCoupon']);
+    Route::post('/billing/coupons/validate', [BillController::class, 'validateCoupon']);
+});
 
 // Protected Endpoints
 Route::middleware(['jwt.auth'])->group(function () {
@@ -92,12 +98,14 @@ Route::middleware(['jwt.auth'])->group(function () {
         Route::get('/staff', [StaffController::class, 'index']);
         Route::post('/staff', [StaffController::class, 'store']);
         Route::put('/staff/{id}', [StaffController::class, 'update']);
+        Route::put('/staff/{id}/pin', [StaffController::class, 'changePin']);
         Route::delete('/staff/{id}', [StaffController::class, 'destroy']);
         Route::get('/staff/sessions', [StaffController::class, 'sessions']);
         Route::post('/staff/sessions/revoke-all', [StaffController::class, 'revokeSessions']);
         Route::get('/staff/login-history', [StaffController::class, 'loginHistory']);
         Route::get('/staff/attendance', [StaffController::class, 'attendance']);
     });
+    Route::put('/staff/me/pin', [AuthController::class, 'changePin']);
     Route::post('/staff/attendance/clock-in', [StaffController::class, 'clockIn']);
     Route::post('/staff/attendance/clock-out', [StaffController::class, 'clockOut']);
 
@@ -319,6 +327,10 @@ Route::middleware(['jwt.auth'])->group(function () {
     // Coupons & Banners
     Route::get('/coupons', [CouponController::class, 'index']);
     Route::get('/banners', [BannerController::class, 'index']);
+    Route::middleware(['role:OWNER,MANAGER'])->group(function () {
+        Route::patch('/coupons/{id}/status', [CouponController::class, 'toggleStatus']);
+        Route::patch('/banners/{id}/status', [BannerController::class, 'toggleStatus']);
+    });
 
     // Analytics & Reports
     Route::middleware(['role:OWNER,MANAGER'])->group(function () {
@@ -348,19 +360,14 @@ Route::middleware(['jwt.auth'])->group(function () {
         Route::get('/reports/inventory-valuation', [ReportController::class, 'inventoryValuation']);
         Route::get('/reports/expenses', [ReportController::class, 'expenses']);
         Route::get('/reports/{type}/export.csv', [ReportController::class, 'exportCsv']);
-    });
 
-    // Frontend Compatibility Aliases
-    Route::put('/staff/me/pin', [AuthController::class, 'changePin']);
-    Route::put('/staff/{id}/pin', [StaffController::class, 'update']);
-    Route::patch('/coupons/{id}/status', [CouponController::class, 'index']);
-    Route::patch('/banners/{id}/status', [BannerController::class, 'index']);
-    Route::get('/inventory/analytics/value', [InventoryController::class, 'valueEstimate']);
-    Route::get('/inventory/analytics/food-cost', [InventoryController::class, 'foodCost']);
-    Route::get('/inventory/analytics/wastage', [InventoryController::class, 'wastageAnalytics']);
-    Route::get('/inventory/analytics/operating-contribution', [InventoryController::class, 'operatingContribution']);
-    Route::get('/marketing/analytics/overview', [MarketingController::class, 'analytics']);
-    Route::get('/marketing/campaigns/{id}/analytics', [MarketingController::class, 'campaignAnalytics']);
+        Route::get('/inventory/analytics/value', [InventoryController::class, 'valueEstimate']);
+        Route::get('/inventory/analytics/food-cost', [InventoryController::class, 'foodCost']);
+        Route::get('/inventory/analytics/wastage', [InventoryController::class, 'wastageAnalytics']);
+        Route::get('/inventory/analytics/operating-contribution', [InventoryController::class, 'operatingContribution']);
+        Route::get('/marketing/analytics/overview', [MarketingController::class, 'analytics']);
+        Route::get('/marketing/campaigns/{id}/analytics', [MarketingController::class, 'campaignAnalytics']);
+    });
 
     Route::post('/uploads', [UploadController::class, 'store']);
 });

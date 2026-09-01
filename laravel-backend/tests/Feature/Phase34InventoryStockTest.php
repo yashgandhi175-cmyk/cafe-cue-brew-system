@@ -98,7 +98,7 @@ class Phase34InventoryStockTest extends TestCase
     public function test_create_update_delete_ingredient()
     {
         $res = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)->postJson('/api/inventory/ingredients', [
-            'name' => 'Full Cream Milk P34 ' . rand(1000, 9999),
+            'name' => 'Full Cream Milk P34 ' . Str::random(8),
             'unit' => 'LITER',
             'category' => 'DAIRY',
             'minimumStock' => 5.0,
@@ -136,7 +136,7 @@ class Phase34InventoryStockTest extends TestCase
     public function test_create_and_update_supplier()
     {
         $res = $this->withHeader('Authorization', 'Bearer ' . $this->managerToken)->postJson('/api/inventory/suppliers', [
-            'name' => 'Amul Dairy Supplier P34 ' . rand(1000, 9999),
+            'name' => 'Amul Dairy Supplier P34 ' . Str::random(8),
             'phone' => '9876543210',
             'email' => 'supplier@amul.com',
         ]);
@@ -159,7 +159,7 @@ class Phase34InventoryStockTest extends TestCase
 
     public function test_create_update_and_delete_recipe()
     {
-        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Espresso Beans P34 ' . rand(100, 999), 'unit' => 'GRAM']);
+        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Espresso Beans P34 ' . Str::random(8), 'unit' => 'GRAM']);
         $cat = Category::create(['id' => (string)Str::uuid(), 'name' => 'Coffee Cat P34', 'displayOrder' => 1]);
         $menuItem = MenuItem::create(['id' => (string)Str::uuid(), 'name' => 'Double Espresso P34', 'categoryId' => $cat->id, 'basePrice' => 120.0]);
 
@@ -192,7 +192,7 @@ class Phase34InventoryStockTest extends TestCase
 
     public function test_purchase_lifecycle_finalization_reversal_and_double_finalization_prevention()
     {
-        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Coffee Powder P34 ' . rand(100, 999), 'unit' => 'KG', 'currentStock' => 10.0, 'averageCost' => 500.00]);
+        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Coffee Powder P34 ' . Str::random(8), 'unit' => 'KG', 'currentStock' => 10.0, 'averageCost' => 500.00]);
         $supplier = Supplier::create(['id' => (string)Str::uuid(), 'name' => 'WholeBean Co', 'phone' => '9999999999']);
 
         $res = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)->postJson('/api/inventory/purchases', [
@@ -262,7 +262,7 @@ class Phase34InventoryStockTest extends TestCase
 
     public function test_wastage_adjustment_and_ledger_correctness()
     {
-        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Syrup P34 ' . rand(100, 999), 'unit' => 'BOTTLE', 'currentStock' => 20.0, 'averageCost' => 200.00]);
+        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Syrup P34 ' . Str::random(8), 'unit' => 'BOTTLE', 'currentStock' => 20.0, 'averageCost' => 200.00]);
 
         $wastageRes = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)->postJson('/api/inventory/wastage', [
             'ingredientId' => $ing->id,
@@ -305,7 +305,7 @@ class Phase34InventoryStockTest extends TestCase
         $unauthRes->assertStatus(403);
 
         $manRes = $this->withHeader('Authorization', 'Bearer ' . $this->managerToken)->postJson('/api/inventory/ingredients', [
-            'name' => 'Manager Sugar ' . rand(1000, 9999),
+            'name' => 'Manager Sugar ' . Str::random(8),
             'unit' => 'KG',
         ]);
         $manRes->assertStatus(201);
@@ -328,7 +328,7 @@ class Phase34InventoryStockTest extends TestCase
 
     public function test_inventory_analytics_and_csv_exports()
     {
-        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Tea Leaves P34 ' . rand(100, 999), 'unit' => 'KG', 'currentStock' => 5.0, 'averageCost' => 400.00]);
+        $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Tea Leaves P34 ' . Str::random(8), 'unit' => 'KG', 'currentStock' => 5.0, 'averageCost' => 400.00]);
 
         $valRes = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)->getJson('/api/inventory/value-estimate');
         $valRes->assertStatus(200)
