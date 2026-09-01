@@ -86,7 +86,16 @@ class AuthService
         $staff->save();
 
         $sessionId = (string)Str::uuid();
-        $secret = env('JWT_SECRET', 'dev-secret-key');
+        $secret = config('app.jwt_secret') ?? env('JWT_SECRET');
+        if (empty($secret)) {
+            if (app()->environment('production')) {
+                throw new \Exception('JWT_SECRET is not configured in production', 500);
+            }
+            $secret = 'dev-secret-key';
+        }
+        if (app()->environment('production') && in_array($secret, ['dev-secret-key', 'cafe-cue-brew-super-secret-key-2026'])) {
+            throw new \Exception('Insecure default JWT_SECRET cannot be used in production', 500);
+        }
         $payload = [
             'sub' => $staff->id,
             'role' => $staff->role,
