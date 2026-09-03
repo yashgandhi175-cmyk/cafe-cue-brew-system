@@ -1,0 +1,24 @@
+RewriteEngine On
+
+# ==================================================
+# Laravel API
+# /api/* -> laravel-backend/public/index.php
+# ==================================================
+
+RewriteCond %{REQUEST_URI} ^/api(?:/|$)
+RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
+
+# ==================================================
+# Next.js Static Export
+# ==================================================
+
+# Serve Next.js static files directly
+RewriteCond %{DOCUMENT_ROOT}/frontend/out/$1 -f
+RewriteRule ^(.+)$ frontend/out/$1 [L]
+
+# Serve Next.js directories/index files
+RewriteCond %{DOCUMENT_ROOT}/frontend/out/$1/index.html -f
+RewriteRule ^(.+?)/?$ frontend/out/$1/index.html [L]
+
+# Root page
+RewriteRule ^$ frontend/out/index.html [L]
