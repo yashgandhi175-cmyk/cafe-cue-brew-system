@@ -29,6 +29,7 @@ laravel-backend/bootstrap/cache/*.php
 .phpunit.result.cache
 
 # Archives & Temporary artifacts
+DEPLOYMENT/
 *.zip
 *.tar.gz
 *.tgz

@@ -69,9 +69,9 @@ Route::middleware(['throttle:60,1'])->group(function () {
     Route::get('/public/banners', [PublicMenuController::class, 'banners']);
     Route::get('/public/menu', [PublicMenuController::class, 'index']);
 
+    Route::get('/public/tables/validate', [PublicTableController::class, 'showByToken']);
     Route::get('/tables/token/{token}', [PublicTableController::class, 'showByToken']);
     Route::get('/public/tables/{token}', [PublicTableController::class, 'showByToken']);
-    Route::get('/public/tables/validate', [PublicTableController::class, 'showByToken']);
 
     Route::post('/public/tables/{tableId}/call-waiter', [WaiterCallController::class, 'store']);
 

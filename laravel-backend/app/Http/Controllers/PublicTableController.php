@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use App\Services\TableService;
 
 class PublicTableController extends Controller
@@ -13,10 +14,14 @@ class PublicTableController extends Controller
         $this->tableService = $tableService;
     }
 
-    public function showByToken(string $token)
+    public function showByToken(Request $request, ?string $token = null)
     {
         try {
-            $table = $this->tableService->findByToken($token);
+            $rawToken = ($token && $token !== 'validate') ? $token : $request->query('token');
+            if (!$rawToken) {
+                throw new \Exception('Invalid or expired table QR token.', 404);
+            }
+            $table = $this->tableService->findByToken($rawToken);
             return response()->json([
                 'id' => $table->id,
                 'tableNumber' => $table->tableNumber,

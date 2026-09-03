@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Models\RestaurantTable;
 use App\Models\TableQrToken;
+use App\Models\TableSession;
+use App\Models\WaiterCall;
+use App\Models\CustomerCart;
 use App\Models\Order;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -83,9 +86,31 @@ class TableService
         if (!$table) {
             throw new \Exception('Table not found', 404);
         }
-        $table->isActive = false;
-        $table->save();
-        return ['message' => 'Table deactivated successfully'];
+
+        // Check if there are orders referencing this table
+        $hasOrders = Order::where('tableId', $id)->exists();
+        if ($hasOrders) {
+            $table->isActive = false;
+            $table->save();
+            return [
+                'message' => "Table {$table->tableNumber} has historical orders and was safely deactivated.",
+                'action' => 'deactivated'
+            ];
+        }
+
+        // Clean up transient table associations
+        TableQrToken::where('tableId', $id)->delete();
+        TableSession::where('tableId', $id)->delete();
+        WaiterCall::where('tableId', $id)->delete();
+        CustomerCart::where('tableId', $id)->delete();
+
+        $tableNumber = $table->tableNumber;
+        $table->delete();
+
+        return [
+            'message' => "Table {$tableNumber} deleted successfully.",
+            'action' => 'deleted'
+        ];
     }
 
     public function regenerateQrToken(string $id): array

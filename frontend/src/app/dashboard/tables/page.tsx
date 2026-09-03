@@ -4,11 +4,28 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { QrCode, Plus, Edit2, ToggleLeft, ToggleRight, Download, Printer, RefreshCw, Users, Search, ArrowRightLeft, GitMerge } from 'lucide-react';
+import {
+  QrCode,
+  Plus,
+  Edit2,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Download,
+  Printer,
+  RefreshCw,
+  Users,
+  Search,
+  ArrowRightLeft,
+  GitMerge,
+  AlertTriangle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import QRCode from 'qrcode';
 
 interface TableQrToken {
+  id?: string;
+  tableId?: string;
   token: string;
 }
 
@@ -18,23 +35,48 @@ interface RestaurantTable {
   capacity: number;
   status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING';
   isActive: boolean;
-  qrToken: TableQrToken | null;
+  qr_token: TableQrToken | null;
 }
 
 // Sub-component to render and print QR codes
 function TableQrCard({ table }: { table: RestaurantTable }) {
   const [qrUrl, setQrUrl] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
+  const rawToken = table.qr_token?.token || '';
   const publicUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const customerMenuUrl = `${publicUrl}/menu.html?table=${table.id}&token=${table.qrToken?.token || ''}`;
+  const customerMenuUrl = rawToken ? `${publicUrl}/menu?table=${table.id}&token=${rawToken}` : '';
 
   useEffect(() => {
-    if (table.qrToken?.token) {
-      QRCode.toDataURL(customerMenuUrl, { width: 300, margin: 2 })
-        .then((url) => setQrUrl(url))
-        .catch((err) => console.error('QR code generation error:', err));
+    let isMounted = true;
+    if (rawToken && customerMenuUrl) {
+      setIsGenerating(true);
+      QRCode.toDataURL(customerMenuUrl, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#3C2A21',
+          light: '#FFFFFF',
+        },
+      })
+        .then((url) => {
+          if (isMounted) {
+            setQrUrl(url);
+            setIsGenerating(false);
+          }
+        })
+        .catch((err) => {
+          console.error('QR code generation error:', err);
+          if (isMounted) setIsGenerating(false);
+        });
+    } else {
+      setQrUrl('');
+      setIsGenerating(false);
     }
-  }, [table, customerMenuUrl]);
+    return () => {
+      isMounted = false;
+    };
+  }, [table.id, rawToken, customerMenuUrl]);
 
   const handleDownload = () => {
     if (!qrUrl) return;
@@ -50,65 +92,92 @@ function TableQrCard({ table }: { table: RestaurantTable }) {
     if (!qrUrl) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    
+
     printWindow.document.write(`
       <html>
         <head>
-          <title>Print QR - ${table.tableNumber}</title>
+          <title>Print QR - Table ${table.tableNumber}</title>
           <style>
             body {
-              font-family: system-ui, -apple-system, sans-serif;
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
               display: flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              min-height: 90vh;
+              min-height: 95vh;
               margin: 0;
-              background-color: white;
+              background-color: #fcfbf9;
             }
             .container {
-              border: 2px solid #3c2a21;
-              border-radius: 24px;
+              border: 3px solid #3C2A21;
+              border-radius: 28px;
               padding: 40px;
               text-align: center;
-              box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+              background: #ffffff;
+              box-shadow: 0 10px 25px rgba(60, 42, 33, 0.08);
+              max-width: 380px;
+            }
+            .badge {
+              display: inline-block;
+              background-color: #EAD8C0;
+              color: #3C2A21;
+              padding: 4px 14px;
+              border-radius: 999px;
+              font-size: 12px;
+              font-weight: 800;
+              letter-spacing: 1px;
+              margin-bottom: 12px;
             }
             h1 {
-              color: #3c2a21;
-              margin: 0 0 10px 0;
-              font-size: 28px;
-              font-weight: 800;
+              color: #3C2A21;
+              margin: 0 0 6px 0;
+              font-size: 26px;
+              font-weight: 900;
+              letter-spacing: -0.5px;
             }
             p {
-              color: #666;
-              margin: 0 0 20px 0;
-              font-size: 14px;
+              color: #795744;
+              margin: 0 0 24px 0;
+              font-size: 13px;
+              font-weight: 500;
             }
             img {
-              width: 250px;
-              height: 250px;
+              width: 240px;
+              height: 240px;
+              border-radius: 16px;
+              border: 1px solid #EAD8C0;
+              padding: 8px;
+            }
+            .table-label {
+              font-size: 28px;
+              font-weight: 900;
+              color: #3C2A21;
+              margin-top: 18px;
+              letter-spacing: -0.5px;
             }
             .footer {
               margin-top: 20px;
-              font-size: 11px;
-              color: #aaa;
+              font-size: 10px;
+              font-weight: 600;
+              color: #A08370;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
             }
           </style>
         </head>
         <body>
           <div class="container">
+            <div class="badge">DINE-IN ORDERING</div>
             <h1>CAFE CUE & BREW</h1>
-            <p>Scan to view digital menu and place order</p>
-            <img src="${qrUrl}" alt="QR Code" />
-            <div style="font-size: 24px; font-weight: 700; color: #3c2a21; margin-top: 15px;">
-              ${table.tableNumber}
-            </div>
-            <div class="footer">Cafe Cue & Brew Restaurant System</div>
+            <p>Scan to explore menu & place your order</p>
+            <img src="${qrUrl}" alt="Table QR Code" />
+            <div class="table-label">Table ${table.tableNumber}</div>
+            <div class="footer">Powered by Cafe Cue & Brew System</div>
           </div>
           <script>
             window.onload = function() {
               window.print();
-              setTimeout(function() { window.close(); }, 500);
+              setTimeout(function() { window.close(); }, 600);
             };
           </script>
         </body>
@@ -120,27 +189,36 @@ function TableQrCard({ table }: { table: RestaurantTable }) {
   return (
     <div className="bg-[#FAF8F5] p-4 rounded-xl border border-[#EAD8C0]/30 flex flex-col items-center gap-3">
       {qrUrl ? (
-        <img src={qrUrl} alt="QR Code" className="w-40 h-40 border border-gray-100 rounded-lg shadow-sm" />
+        <img
+          src={qrUrl}
+          alt={`QR Code Table ${table.tableNumber}`}
+          className="w-40 h-40 border border-stone-200 rounded-xl shadow-sm bg-white p-1"
+        />
+      ) : isGenerating ? (
+        <div className="w-40 h-40 bg-stone-100 animate-pulse rounded-xl flex items-center justify-center">
+          <RefreshCw className="h-6 w-6 text-stone-400 animate-spin" />
+        </div>
       ) : (
-        <div className="w-40 h-40 bg-gray-100 animate-pulse rounded-lg flex items-center justify-center">
-          <QrCode className="h-8 w-8 text-gray-300" />
+        <div className="w-40 h-40 bg-stone-100 rounded-xl flex flex-col items-center justify-center p-2 text-center">
+          <QrCode className="h-8 w-8 text-stone-300 mb-1" />
+          <span className="text-[11px] text-stone-400 font-medium">No active QR token</span>
         </div>
       )}
-      
+
       <div className="flex gap-2 w-full">
         <button
           onClick={handleDownload}
           disabled={!qrUrl}
-          className="flex-1 flex items-center justify-center gap-1 py-2 bg-white border border-[#EAD8C0] text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border border-[#EAD8C0] text-gray-700 rounded-lg text-xs font-bold hover:bg-[#FAF8F5] hover:text-[#3C2A21] transition-colors disabled:opacity-40"
         >
-          <Download className="h-3.5 w-3.5" /> Download
+          <Download className="h-3.5 w-3.5 text-[#8F6A50]" /> Download
         </button>
         <button
           onClick={handlePrint}
           disabled={!qrUrl}
-          className="flex-1 flex items-center justify-center gap-1 py-2 bg-white border border-[#EAD8C0] text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border border-[#EAD8C0] text-gray-700 rounded-lg text-xs font-bold hover:bg-[#FAF8F5] hover:text-[#3C2A21] transition-colors disabled:opacity-40"
         >
-          <Printer className="h-3.5 w-3.5" /> Print
+          <Printer className="h-3.5 w-3.5 text-[#8F6A50]" /> Print
         </button>
       </div>
     </div>
@@ -160,6 +238,10 @@ export default function TablesPage() {
   const [capacity, setCapacity] = useState(4);
   const [status, setStatus] = useState<'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING'>('AVAILABLE');
   const [formError, setFormError] = useState('');
+
+  // Delete State
+  const [deleteTargetTable, setDeleteTargetTable] = useState<RestaurantTable | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   // 1. Fetch Tables
   const { data: tables, isLoading } = useQuery<RestaurantTable[]>({
@@ -211,7 +293,23 @@ export default function TablesPage() {
     },
   });
 
-  // 5. Regenerate Token Mutation
+  // 5. Delete Mutation (Hard delete or soft archive if referenced)
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return api.delete(`/tables/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminTables'] });
+      setDeleteTargetTable(null);
+      setDeleteError('');
+    },
+    onError: (err: unknown) => {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      setDeleteError(axiosError.response?.data?.message || 'Failed to delete table');
+    },
+  });
+
+  // 6. Regenerate Token Mutation
   const regenerateTokenMutation = useMutation({
     mutationFn: async (id: string) => {
       return api.post(`/tables/${id}/regenerate-token`);
@@ -234,7 +332,7 @@ export default function TablesPage() {
   const [mergeReason, setMergeReason] = useState('');
   const [mergeError, setMergeError] = useState('');
 
-  // 6. Shift Table Mutation
+  // 7. Shift Table Mutation
   const shiftMutation = useMutation({
     mutationFn: async (payload: { sourceTableId: string; targetTableId: string; reason?: string }) => {
       return api.post('/tables/shift', payload);
@@ -253,7 +351,7 @@ export default function TablesPage() {
     },
   });
 
-  // 7. Merge Tables Mutation
+  // 8. Merge Tables Mutation
   const mergeMutation = useMutation({
     mutationFn: async (payload: { sourceTableIds: string[]; targetTableId: string; reason?: string }) => {
       return api.post('/tables/merge', payload);
@@ -328,9 +426,9 @@ export default function TablesPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-[#3C2A21] flex items-center gap-2">
             <QrCode className="h-6 w-6 text-[#8F6A50]" />
-            Restaurant Tables
+            Restaurant Tables & QR
           </h1>
-          <p className="text-xs text-gray-500 mt-1">Configure physical dine-in tables and secure QR parameters</p>
+          <p className="text-xs text-gray-500 mt-1">Configure dine-in seating, print high-resolution QR badges, and manage sessions</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -398,6 +496,7 @@ export default function TablesPage() {
         <div className="bg-white border border-[#EAD8C0]/10 rounded-2xl p-12 text-center text-gray-500">
           <QrCode className="h-12 w-12 mx-auto text-gray-300 mb-3" />
           <p className="font-semibold text-gray-700">No tables found</p>
+          <p className="text-xs text-gray-400 mt-1">Click &quot;Add Table&quot; to create your first dining table.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -405,14 +504,14 @@ export default function TablesPage() {
             <div
               key={table.id}
               className={`bg-white rounded-3xl p-5 border shadow-sm flex flex-col justify-between transition-all ${
-                table.isActive ? 'border-[#EAD8C0]/25' : 'border-gray-200 bg-gray-50/50 opacity-70'
+                table.isActive ? 'border-[#EAD8C0]/35' : 'border-gray-200 bg-gray-50/50 opacity-70'
               }`}
             >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Details */}
                 <div className="space-y-4 flex flex-col justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800">{table.tableNumber}</h3>
+                    <h3 className="text-lg font-bold text-gray-800">Table {table.tableNumber}</h3>
                     <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1 font-medium">
                       <Users className="h-4 w-4 text-gray-400" />
                       Capacity: {table.capacity} Guests
@@ -442,7 +541,7 @@ export default function TablesPage() {
                     <button
                       onClick={() => openEditDialog(table)}
                       className="p-2 hover:bg-[#FAF8F5] rounded-xl text-gray-600 hover:text-[#3C2A21] transition-colors"
-                      title="Edit"
+                      title="Edit Table"
                     >
                       <Edit2 className="h-4.5 w-4.5" />
                     </button>
@@ -474,9 +573,19 @@ export default function TablesPage() {
                       className={`p-2 rounded-xl transition-colors ${
                         table.isActive ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-gray-100'
                       }`}
-                      title={table.isActive ? 'Deactivate (Soft Delete)' : 'Reactivate'}
+                      title={table.isActive ? 'Deactivate (Hide from customer menu)' : 'Reactivate'}
                     >
                       {table.isActive ? <ToggleRight className="h-6 w-6" /> : <ToggleLeft className="h-6 w-6" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDeleteError('');
+                        setDeleteTargetTable(table);
+                      }}
+                      className="p-2 hover:bg-rose-50 rounded-xl text-gray-400 hover:text-rose-600 transition-colors"
+                      title="Delete Table"
+                    >
+                      <Trash2 className="h-4.5 w-4.5" />
                     </button>
                   </div>
                 </div>
@@ -489,7 +598,7 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* DIALOG MODAL */}
+      {/* CREATE / EDIT MODAL */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-[#EAD8C0]/20 animate-in fade-in zoom-in-95 duration-150">
@@ -499,44 +608,44 @@ export default function TablesPage() {
             <p className="text-xs text-gray-400 mb-6">Configure physical identifier and seating parameters</p>
 
             {formError && (
-              <div className="mb-4 p-2.5 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs text-center font-medium">
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl mb-4 font-semibold">
                 {formError}
               </div>
             )}
 
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Table Number/Label</label>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Table Number / Label *</label>
                 <input
                   type="text"
+                  placeholder="e.g., Table 1, Patio 4, VIP 2"
                   value={tableNumber}
                   onChange={(e) => setTableNumber(e.target.value)}
-                  placeholder="e.g. Table 5, Table 10"
-                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] outline-none rounded-xl text-sm"
                   required
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] outline-none rounded-xl text-sm font-semibold"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Capacity (Max Guests)</label>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Seating Capacity (Guests)</label>
                 <input
                   type="number"
+                  min="1"
+                  max="50"
                   value={capacity}
                   onChange={(e) => setCapacity(Number(e.target.value))}
-                  placeholder="4"
-                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] outline-none rounded-xl text-sm"
-                  min="1"
                   required
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] outline-none rounded-xl text-sm font-semibold"
                 />
               </div>
 
               {editId && (
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Current Status</label>
+                  <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Status</label>
                   <select
                     value={status}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value as 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING')}
-                    className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] outline-none rounded-xl text-sm text-gray-600 focus:border-[#8F6A50]"
+                    onChange={(e) => setStatus(e.target.value as 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING')}
+                    className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] focus:border-[#8F6A50] outline-none rounded-xl text-sm font-semibold text-gray-700"
                   >
                     <option value="AVAILABLE">AVAILABLE</option>
                     <option value="OCCUPIED">OCCUPIED</option>
@@ -553,9 +662,9 @@ export default function TablesPage() {
                 <Button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
-                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md"
+                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md font-bold"
                 >
-                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : 'Save Table'}
+                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editId ? 'Update Table' : 'Create Table'}
                 </Button>
               </div>
             </form>
@@ -563,18 +672,71 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* SHIFT TABLE MODAL */}
+      {/* DELETE CONFIRMATION MODAL */}
+      {deleteTargetTable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-rose-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600 mb-3">
+              <div className="p-3 bg-rose-50 rounded-2xl">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Remove Table</h2>
+                <p className="text-xs text-gray-500">Confirm permanent removal or archiving</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to remove <span className="font-bold text-[#3C2A21]">Table {deleteTargetTable.tableNumber}</span>?
+              <br />
+              <span className="text-xs text-gray-400 block mt-2">
+                If this table has existing order history, it will be safely deactivated to preserve accounting records.
+              </span>
+            </p>
+
+            {deleteError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl mb-4 font-semibold">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-3 border-t border-gray-100">
+              <Button
+                type="button"
+                onClick={() => {
+                  setDeleteTargetTable(null);
+                  setDeleteError('');
+                }}
+                variant="ghost"
+                className="rounded-xl h-10 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => deleteMutation.mutate(deleteTargetTable.id)}
+                disabled={deleteMutation.isPending}
+                className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-5 h-10 text-xs shadow-md font-bold"
+              >
+                {deleteMutation.isPending ? 'Removing...' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SHIFT MODAL */}
       {isShiftOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-[#EAD8C0]/20 animate-in fade-in zoom-in-95 duration-150">
             <h2 className="text-xl font-extrabold text-[#3C2A21] mb-1 flex items-center gap-2">
-              <ArrowRightLeft className="w-5 h-5 text-[#8F6A50]" />
-              Shift Table
+              <ArrowRightLeft className="h-5 w-5 text-[#8F6A50]" />
+              Shift Table Orders
             </h2>
-            <p className="text-xs text-gray-500 mb-4">Move a session & orders from an occupied table to an available table</p>
+            <p className="text-xs text-gray-400 mb-6">Transfer active guest orders to a different dining table</p>
 
             {shiftError && (
-              <div className="mb-4 p-2.5 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs text-center font-medium">
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl mb-4 font-semibold">
                 {shiftError}
               </div>
             )}
@@ -583,19 +745,23 @@ export default function TablesPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!shiftSourceId || !shiftTargetId) {
-                  setShiftError('Please select both source and target tables.');
+                  setShiftError('Please select both source and target tables');
+                  return;
+                }
+                if (shiftSourceId === shiftTargetId) {
+                  setShiftError('Source and target tables cannot be the same');
                   return;
                 }
                 shiftMutation.mutate({
                   sourceTableId: shiftSourceId,
                   targetTableId: shiftTargetId,
-                  reason: shiftReason || undefined,
+                  reason: shiftReason,
                 });
               }}
               className="space-y-4"
             >
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Source Table (Currently Occupied) *</label>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Source Table (Active Orders) *</label>
                 <select
                   value={shiftSourceId}
                   onChange={(e) => setShiftSourceId(e.target.value)}
@@ -604,17 +770,17 @@ export default function TablesPage() {
                 >
                   <option value="">Select Occupied Table</option>
                   {tables
-                    ?.filter((t) => t.status === 'OCCUPIED' && t.isActive)
+                    ?.filter((t) => t.isActive && t.status === 'OCCUPIED')
                     .map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.tableNumber} (Capacity: {t.capacity})
+                        Table {t.tableNumber} (Occupied)
                       </option>
                     ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Target Table (Available Destination) *</label>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Destination Table *</label>
                 <select
                   value={shiftTargetId}
                   onChange={(e) => setShiftTargetId(e.target.value)}
@@ -623,10 +789,10 @@ export default function TablesPage() {
                 >
                   <option value="">Select Available Table</option>
                   {tables
-                    ?.filter((t) => t.status === 'AVAILABLE' && t.isActive && t.id !== shiftSourceId)
+                    ?.filter((t) => t.isActive && t.id !== shiftSourceId)
                     .map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.tableNumber} (Capacity: {t.capacity})
+                        Table {t.tableNumber} ({t.status})
                       </option>
                     ))}
                 </select>
@@ -636,10 +802,10 @@ export default function TablesPage() {
                 <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Reason (Optional)</label>
                 <input
                   type="text"
-                  placeholder="E.g., Customer moved to larger table"
+                  placeholder="E.g., Guest requested window booth"
                   value={shiftReason}
                   onChange={(e) => setShiftReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] outline-none rounded-xl text-sm"
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] outline-none rounded-xl text-sm font-semibold"
                 />
               </div>
 
@@ -650,9 +816,9 @@ export default function TablesPage() {
                 <Button
                   type="submit"
                   disabled={shiftMutation.isPending}
-                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md"
+                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md font-bold"
                 >
-                  {shiftMutation.isPending ? 'Shifting...' : 'Shift Table'}
+                  {shiftMutation.isPending ? 'Shifting...' : 'Confirm Shift'}
                 </Button>
               </div>
             </form>
@@ -660,18 +826,18 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* MERGE TABLES MODAL */}
+      {/* MERGE MODAL */}
       {isMergeOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-[#EAD8C0]/20 animate-in fade-in zoom-in-95 duration-150">
             <h2 className="text-xl font-extrabold text-[#3C2A21] mb-1 flex items-center gap-2">
-              <GitMerge className="w-5 h-5 text-[#8F6A50]" />
+              <GitMerge className="h-5 w-5 text-[#8F6A50]" />
               Merge Tables
             </h2>
-            <p className="text-xs text-gray-500 mb-4">Combine active sessions, orders & bills from multiple tables into one primary table</p>
+            <p className="text-xs text-gray-400 mb-6">Combine orders from multiple tables into a single bill</p>
 
             {mergeError && (
-              <div className="mb-4 p-2.5 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl text-xs text-center font-medium">
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl mb-4 font-semibold">
                 {mergeError}
               </div>
             )}
@@ -680,20 +846,20 @@ export default function TablesPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (mergeSourceIds.length === 0 || !mergeTargetId) {
-                  setMergeError('Please select source tables and a target destination table.');
+                  setMergeError('Please select source tables and a target destination table');
                   return;
                 }
                 mergeMutation.mutate({
                   sourceTableIds: mergeSourceIds,
                   targetTableId: mergeTargetId,
-                  reason: mergeReason || undefined,
+                  reason: mergeReason,
                 });
               }}
               className="space-y-4"
             >
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Source Tables to Combine *</label>
-                <div className="max-h-36 overflow-y-auto space-y-1.5 p-2 bg-[#FAF8F5] border border-[#EAD8C0] rounded-xl">
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Select Tables to Merge *</label>
+                <div className="max-h-36 overflow-y-auto space-y-1 p-2 bg-[#FAF8F5] border border-[#EAD8C0] rounded-xl">
                   {tables
                     ?.filter((t) => t.isActive && t.id !== mergeTargetId)
                     .map((t) => {
@@ -716,7 +882,7 @@ export default function TablesPage() {
                               }}
                               className="w-4 h-4 accent-[#3C2A21] rounded"
                             />
-                            <span className="text-gray-800">{t.tableNumber}</span>
+                            <span className="text-gray-800">Table {t.tableNumber}</span>
                           </div>
                           <span
                             className={`text-[10px] px-2 py-0.5 rounded font-bold ${
@@ -734,7 +900,7 @@ export default function TablesPage() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Primary / Target Destination Table *</label>
+                <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Primary / Destination Table *</label>
                 <select
                   value={mergeTargetId}
                   onChange={(e) => {
@@ -750,7 +916,7 @@ export default function TablesPage() {
                     ?.filter((t) => t.isActive)
                     .map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.tableNumber} ({t.status})
+                        Table {t.tableNumber} ({t.status})
                       </option>
                     ))}
                 </select>
@@ -763,7 +929,7 @@ export default function TablesPage() {
                   placeholder="E.g., Large party combined tables"
                   value={mergeReason}
                   onChange={(e) => setMergeReason(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] outline-none rounded-xl text-sm"
+                  className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#EAD8C0] outline-none rounded-xl text-sm font-semibold"
                 />
               </div>
 
@@ -774,7 +940,7 @@ export default function TablesPage() {
                 <Button
                   type="submit"
                   disabled={mergeMutation.isPending}
-                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md"
+                  className="bg-[#3C2A21] text-[#EAD8C0] hover:bg-[#4A3525] rounded-xl px-6 h-10 text-xs shadow-md font-bold"
                 >
                   {mergeMutation.isPending ? 'Merging...' : 'Confirm Merge'}
                 </Button>
