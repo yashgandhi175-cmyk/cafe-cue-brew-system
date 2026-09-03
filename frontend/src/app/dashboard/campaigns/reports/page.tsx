@@ -30,7 +30,7 @@ export default function CampaignReportsPage() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/marketing/reports', {
+      const res = await api.get('/marketing/campaigns', {
         params: {
           page,
           limit: 10,
@@ -40,9 +40,12 @@ export default function CampaignReportsPage() {
           endDate: endDate || undefined,
         }
       });
-      setReports(res.data.data || []);
-      setTotalPages(res.data.pagination?.pages || 1);
-      setTotalRecords(res.data.pagination?.total || 0);
+      const items = res.data.items || res.data.data || (Array.isArray(res.data) ? res.data : []);
+      const total = res.data.total ?? res.data.pagination?.total ?? items.length;
+      const pages = res.data.pages ?? Math.ceil(total / 10) ?? 1;
+      setReports(items);
+      setTotalPages(pages);
+      setTotalRecords(total);
     } catch (err) {
       console.error('Failed to fetch reports', err);
     } finally {

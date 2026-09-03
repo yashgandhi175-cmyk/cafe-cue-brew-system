@@ -112,6 +112,7 @@ class Phase34InventoryStockTest extends TestCase
         $this->assertDatabaseHas('StockTransaction', [
             'ingredientId' => $ingId,
             'type' => 'OPENING_STOCK',
+            'notes' => 'Initial setup of ingredient.',
             'balanceBefore' => 0,
             'balanceAfter' => 0,
         ]);

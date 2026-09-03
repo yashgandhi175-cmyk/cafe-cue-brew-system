@@ -252,7 +252,7 @@ export default function InventoryPage() {
   const { data: menuItems = [] } = useQuery<MenuItem[]>({
     queryKey: ['menuItems-dropdown'],
     queryFn: async () => {
-      const res = await api.get('/menu');
+      const res = await api.get('/menu/items');
       return res.data;
     },
   });
