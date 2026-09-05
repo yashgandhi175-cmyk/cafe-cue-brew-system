@@ -1,24 +1,47 @@
-DirectoryIndex index.html index.php
-
 RewriteEngine On
 RewriteBase /
 
-# 1. Laravel API: /api/* -> laravel-backend/public/index.php
+# ==================================================
+# 1. Laravel API (/api/* -> laravel-backend)
+# ==================================================
 RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
 
-# 2. Next.js static bundles & assets (Serve directly)
+# ==================================================
+# 2. Next.js Assets (_next/...) - supports both out/_next and direct _next
+# ==================================================
+RewriteCond %{DOCUMENT_ROOT}/out/_next/$1 -f
+RewriteRule ^_next/(.*)$ out/_next/$1 [L]
+
 RewriteRule ^_next/(.*)$ _next/$1 [L]
+
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
-# 3. If directory, serve directory's index.html (e.g. /login -> /login/index.html, /dashboard -> /dashboard/index.html)
-RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^(.*)/?$ $1/index.html [L]
+# ==================================================
+# 3. Serve Routes from out/ folder (e.g. /login -> out/login/index.html)
+# ==================================================
+RewriteCond %{DOCUMENT_ROOT}/out/$1/index.html -f
+RewriteRule ^(.*)$ out/$1/index.html [L]
 
-# 4. Fallback for clean HTML pages (e.g. /login -> /login.html)
-RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteCond %{DOCUMENT_ROOT}/out/$1.html -f
+RewriteRule ^(.*)$ out/$1.html [L]
+
+RewriteCond %{DOCUMENT_ROOT}/out/$1 -f
+RewriteRule ^(.*)$ out/$1 [L]
+
+# ==================================================
+# 4. Serve Routes directly from public_html
+# ==================================================
+RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+RewriteRule ^(.*)$ $1/index.html [L]
+
+RewriteCond %{DOCUMENT_ROOT}/$1.html -f
 RewriteRule ^(.*)$ $1.html [L]
 
-# 5. SPA Fallback
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^ index.html [L]
+# ==================================================
+# 5. Root Homepage
+# ==================================================
+RewriteCond %{DOCUMENT_ROOT}/out/index.html -f
+RewriteRule ^$ out/index.html [L]
+
+RewriteRule ^$ index.html [L]
