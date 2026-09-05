@@ -1,34 +1,18 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteBase /
 
-    # ==================================================
     # 1. Laravel API: /api/* -> laravel-backend/public/index.php
-    # ==================================================
-    RewriteCond %{REQUEST_URI} ^/api(?:/|$)
     RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
 
-    # ==================================================
-    # 2. Serve Static Assets & Bundles directly (_next, images, css, js)
-    # ==================================================
+    # 2. Serve static files directly (_next bundles, css, js, images, favicon)
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ - [L]
 
-    # ==================================================
-    # 3. Serve Directory index.html (e.g. /dashboard/tables -> /dashboard/tables/index.html)
-    # ==================================================
+    # 3. Serve directories with index.html (e.g. /dashboard, /dashboard/tables, /login, /menu)
     RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
-    RewriteRule ^(.+?)/?$ $1/index.html [L]
+    RewriteRule ^(.*)$ $1/index.html [L]
 
-    # ==================================================
-    # 4. Serve Page .html (e.g. /login -> /login.html)
-    # ==================================================
-    RewriteCond %{DOCUMENT_ROOT}/$1.html -f
-    RewriteRule ^(.+?)/?$ $1.html [L]
-
-    # ==================================================
-    # 5. SPA / Static Export Fallback (routes unmatched requests to index.html)
-    # ==================================================
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule . /index.html [L]
+    # 4. Serve root homepage
+    RewriteRule ^$ index.html [L]
 </IfModule>
