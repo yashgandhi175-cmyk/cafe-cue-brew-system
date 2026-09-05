@@ -1,39 +1,34 @@
-DirectoryIndex index.html index.php
-Options -Indexes +FollowSymLinks
-RewriteEngine On
+<IfModule mod_rewrite.c>
+    RewriteEngine On
 
-# ==================================================
-# 1. Laravel API Routing (/api/*)
-# ==================================================
-RewriteCond %{REQUEST_URI} ^/api(?:/|$)
-RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
+    # ==================================================
+    # 1. Laravel API: /api/* -> laravel-backend/public/index.php
+    # ==================================================
+    RewriteCond %{REQUEST_URI} ^/api(?:/|$)
+    RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
 
-# ==================================================
-# 2. Serve Existing Static Files & Next.js Bundles
-# ==================================================
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^ - [L]
+    # ==================================================
+    # 2. Serve Static Assets & Bundles directly (_next, images, css, js)
+    # ==================================================
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
 
-# ==================================================
-# 3. Serve Directory HTML (e.g. /dashboard -> /dashboard/index.html)
-# ==================================================
-RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
-RewriteRule ^(.+?)/?$ $1/index.html [L]
+    # ==================================================
+    # 3. Serve Directory index.html (e.g. /dashboard/tables -> /dashboard/tables/index.html)
+    # ==================================================
+    RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+    RewriteRule ^(.+?)/?$ $1/index.html [L]
 
-# ==================================================
-# 4. Fallback for Static HTML Pages (e.g. /menu -> /menu.html)
-# ==================================================
-RewriteCond %{DOCUMENT_ROOT}/$1.html -f
-RewriteRule ^(.+?)/?$ $1.html [L]
+    # ==================================================
+    # 4. Serve Page .html (e.g. /login -> /login.html)
+    # ==================================================
+    RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+    RewriteRule ^(.+?)/?$ $1.html [L]
 
-# ==================================================
-# 5. Fallback if assets reside in frontend/out/
-# ==================================================
-RewriteCond %{DOCUMENT_ROOT}/frontend/out/$1/index.html -f
-RewriteRule ^(.+?)/?$ frontend/out/$1/index.html [L]
-
-RewriteCond %{DOCUMENT_ROOT}/frontend/out/$1.html -f
-RewriteRule ^(.+?)/?$ frontend/out/$1.html [L]
-
-RewriteCond %{DOCUMENT_ROOT}/frontend/out/$1 -f
-RewriteRule ^(.+)$ frontend/out/$1 [L]
+    # ==================================================
+    # 5. SPA / Static Export Fallback (routes unmatched requests to index.html)
+    # ==================================================
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule . /index.html [L]
+</IfModule>
