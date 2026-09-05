@@ -5,14 +5,21 @@
     # 1. Laravel API: /api/* -> laravel-backend/public/index.php
     RewriteRule ^api(?:/(.*))?$ laravel-backend/public/index.php [L,QSA]
 
-    # 2. Serve static files directly (_next bundles, css, js, images, favicon)
+    # 2. Next.js static bundles & assets (Serve directly without rewriting)
+    RewriteRule ^_next/(.*)$ _next/$1 [L]
+
+    # 3. Serve existing static files directly
     RewriteCond %{REQUEST_FILENAME} -f
     RewriteRule ^ - [L]
 
-    # 3. Serve directories with index.html (e.g. /dashboard, /dashboard/tables, /login, /menu)
+    # 4. Serve directories with index.html (e.g. /dashboard/tables -> dashboard/tables/index.html)
     RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
     RewriteRule ^(.*)$ $1/index.html [L]
 
-    # 4. Serve root homepage
+    # 5. Fallback for clean HTML pages (e.g. /login -> login/index.html)
+    RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+    RewriteRule ^(.*)$ $1.html [L]
+
+    # 6. Root homepage
     RewriteRule ^$ index.html [L]
 </IfModule>
