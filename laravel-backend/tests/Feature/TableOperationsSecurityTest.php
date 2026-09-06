@@ -7,6 +7,10 @@ use App\Models\Staff;
 use App\Models\StaffSession;
 use App\Models\RestaurantTable;
 use App\Models\Order;
+use App\Models\TableQrToken;
+use App\Models\TableSession;
+use App\Models\WaiterCall;
+use App\Models\CustomerCart;
 use App\Support\JwtHelper;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -193,5 +197,149 @@ class TableOperationsSecurityTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+    public function test_delete_table_without_orders_removes_transient_records(): void
+    {
+        $table = $this->createTable('AVAILABLE');
+
+        $qrToken = TableQrToken::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+            'token' => 'SEC_DELETE_' . Str::random(20),
+            'createdAt' => now(),
+        ]);
+
+        $session = TableSession::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+            'status' => 'OPEN',
+            'createdAt' => now(),
+        ]);
+
+        $waiterCall = WaiterCall::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+            'tableNumberSnapshot' => $table->tableNumber,
+            'requestedAt' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $cart = CustomerCart::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+        ]);
+
+        $response = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->token
+        )->deleteJson('/api/tables/' . $table->id);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'action' => 'deleted',
+            ]);
+
+        $this->assertDatabaseMissing('RestaurantTable', [
+            'id' => $table->id,
+        ]);
+
+        $this->assertDatabaseMissing('TableQrToken', [
+            'id' => $qrToken->id,
+        ]);
+
+        $this->assertDatabaseMissing('TableSession', [
+            'id' => $session->id,
+        ]);
+
+        $this->assertDatabaseMissing('WaiterCall', [
+            'id' => $waiterCall->id,
+        ]);
+
+        $this->assertDatabaseMissing('CustomerCart', [
+            'id' => $cart->id,
+        ]);
+    }
+
+    public function test_delete_table_with_orders_deactivates_and_preserves_history(): void
+    {
+        $table = $this->createTable('OCCUPIED');
+        $order = $this->createActiveOrder($table->id);
+
+        $qrToken = TableQrToken::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+            'token' => 'SEC_HISTORY_' . Str::random(20),
+            'createdAt' => now(),
+        ]);
+
+        $response = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->token
+        )->deleteJson('/api/tables/' . $table->id);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'action' => 'deactivated',
+            ]);
+
+        $this->assertDatabaseHas('RestaurantTable', [
+            'id' => $table->id,
+            'isActive' => false,
+        ]);
+
+        $this->assertDatabaseHas('Order', [
+            'id' => $order->id,
+            'tableId' => $table->id,
+        ]);
+
+        $this->assertDatabaseHas('TableQrToken', [
+            'id' => $qrToken->id,
+            'tableId' => $table->id,
+        ]);
+    }
+
+    public function test_qr_regeneration_invalidates_old_token(): void
+    {
+        $table = $this->createTable('AVAILABLE');
+
+        $oldToken = TableQrToken::create([
+            'id' => (string) Str::uuid(),
+            'tableId' => $table->id,
+            'token' => 'SEC_OLD_' . Str::random(20),
+            'createdAt' => now(),
+        ]);
+
+        $response = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->token
+        )->postJson('/api/tables/' . $table->id . '/qr-token');
+
+        $response->assertStatus(200)
+            ->assertJsonStructure([
+                'token',
+                'tableId',
+            ]);
+
+        $newToken = $response->json('token');
+
+        $this->assertNotSame($oldToken->token, $newToken);
+
+        $oldLookup = $this->getJson('/api/tables/token/' . $oldToken->token);
+        $oldLookup->assertStatus(404);
+
+        $newLookup = $this->getJson('/api/tables/token/' . $newToken);
+        $newLookup->assertStatus(200)
+            ->assertJson([
+                'id' => $table->id,
+            ]);
+
+        $this->assertDatabaseHas('TableQrToken', [
+            'tableId' => $table->id,
+            'token' => $newToken,
+        ]);
+
+        $this->assertDatabaseMissing('TableQrToken', [
+            'token' => $oldToken->token,
+        ]);
     }
 }

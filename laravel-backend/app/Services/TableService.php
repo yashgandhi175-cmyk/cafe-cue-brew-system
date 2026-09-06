@@ -81,24 +81,30 @@ class TableService
     }
 
     public function delete(string $id): array
-    {
-        $table = RestaurantTable::find($id);
+{
+    return DB::transaction(function () use ($id) {
+        $table = RestaurantTable::where('id', $id)
+            ->lockForUpdate()
+            ->first();
+
         if (!$table) {
             throw new \Exception('Table not found', 404);
         }
 
-        // Check if there are orders referencing this table
+        // Preserve tables that have historical orders.
         $hasOrders = Order::where('tableId', $id)->exists();
+
         if ($hasOrders) {
             $table->isActive = false;
             $table->save();
+
             return [
                 'message' => "Table {$table->tableNumber} has historical orders and was safely deactivated.",
                 'action' => 'deactivated'
             ];
         }
 
-        // Clean up transient table associations
+        // Clean up transient table associations before physical deletion.
         TableQrToken::where('tableId', $id)->delete();
         TableSession::where('tableId', $id)->delete();
         WaiterCall::where('tableId', $id)->delete();
@@ -111,7 +117,9 @@ class TableService
             'message' => "Table {$tableNumber} deleted successfully.",
             'action' => 'deleted'
         ];
-    }
+    });
+}
+
 
     public function regenerateQrToken(string $id): array
     {
