@@ -105,4 +105,78 @@ class Phase7HardeningTest extends TestCase
 
         $this->assertEquals(403, $response->getStatusCode());
     }
+    public function test_jwt_helper_rejects_non_hs256_algorithm_header(): void
+    {
+        $payload = ['staffId' => 'test-staff-123'];
+
+        $header = JwtHelper::base64UrlEncode(json_encode([
+            'alg' => 'HS384',
+            'typ' => 'JWT',
+        ]));
+
+        $encodedPayload = JwtHelper::base64UrlEncode(json_encode($payload));
+
+        $signature = JwtHelper::base64UrlEncode(
+            hash_hmac(
+                'sha256',
+                $header . '.' . $encodedPayload,
+                'test-secret',
+                true
+            )
+        );
+
+        $token = $header . '.' . $encodedPayload . '.' . $signature;
+
+        $this->assertNull(
+            JwtHelper::decodeToken($token, 'test-secret')
+        );
+    }
+
+    public function test_jwt_helper_rejects_invalid_header_json(): void
+    {
+        $header = JwtHelper::base64UrlEncode('{invalid-json');
+        $payload = JwtHelper::base64UrlEncode(json_encode([
+            'staffId' => 'test-staff-123',
+        ]));
+
+        $signature = JwtHelper::base64UrlEncode(
+            hash_hmac(
+                'sha256',
+                $header . '.' . $payload,
+                'test-secret',
+                true
+            )
+        );
+
+        $token = $header . '.' . $payload . '.' . $signature;
+
+        $this->assertNull(
+            JwtHelper::decodeToken($token, 'test-secret')
+        );
+    }
+
+    public function test_jwt_helper_rejects_malformed_base64_payload(): void
+    {
+        $header = JwtHelper::base64UrlEncode(json_encode([
+            'alg' => 'HS256',
+            'typ' => 'JWT',
+        ]));
+
+        $malformedPayload = '%%%invalid%%%';
+
+        $signature = JwtHelper::base64UrlEncode(
+            hash_hmac(
+                'sha256',
+                $header . '.' . $malformedPayload,
+                'test-secret',
+                true
+            )
+        );
+
+        $token = $header . '.' . $malformedPayload . '.' . $signature;
+
+        $this->assertNull(
+            JwtHelper::decodeToken($token, 'test-secret')
+        );
+    }
 }

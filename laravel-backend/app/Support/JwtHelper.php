@@ -11,21 +11,47 @@ class JwtHelper
         $base64UrlPayload = self::base64UrlEncode(json_encode($payload));
         $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secret, true);
         $base64UrlSignature = self::base64UrlEncode($signature);
+
         return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
     }
 
     public static function decodeToken(string $jwt, string $secret): ?array
     {
         $tokenParts = explode('.', $jwt);
+
         if (count($tokenParts) !== 3) {
             return null;
         }
+
         [$base64UrlHeader, $base64UrlPayload, $base64UrlSignature] = $tokenParts;
-        $signature = self::base64UrlEncode(hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $secret, true));
+
+        $headerJson = self::base64UrlDecode($base64UrlHeader);
+        $header = json_decode($headerJson, true);
+
+        if (
+            !is_array($header) ||
+            ($header['alg'] ?? null) !== 'HS256' ||
+            ($header['typ'] ?? null) !== 'JWT'
+        ) {
+            return null;
+        }
+
+        $signature = self::base64UrlEncode(
+            hash_hmac(
+                'sha256',
+                $base64UrlHeader . "." . $base64UrlPayload,
+                $secret,
+                true
+            )
+        );
+
         if (!hash_equals($signature, $base64UrlSignature)) {
             return null;
         }
-        $payload = json_decode(self::base64UrlDecode($base64UrlPayload), true);
+
+        $payloadJson = self::base64UrlDecode($base64UrlPayload);
+        $payload = json_decode($payloadJson, true);
+
         return is_array($payload) ? $payload : null;
     }
 
@@ -36,6 +62,14 @@ class JwtHelper
 
     public static function base64UrlDecode(string $data): string
     {
-        return base64_decode(strtr($data, '-_', '+/'));
+        $padding = strlen($data) % 4;
+
+        if ($padding > 0) {
+            $data .= str_repeat('=', 4 - $padding);
+        }
+
+        $decoded = base64_decode(strtr($data, '-_', '+/'), true);
+
+        return $decoded === false ? '' : $decoded;
     }
 }
