@@ -83,6 +83,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
     Route::put('/public/orders/cart/{tableId}', [PublicOrderController::class, 'syncCart']);
     Route::delete('/public/orders/cart/{tableId}', [PublicOrderController::class, 'clearCart']);
 
+    Route::post('/public/coupons/validate', [BillController::class, 'validateCoupon']);
     Route::post('/billing/coupons/validate', [BillController::class, 'validateCoupon']);
 });
 

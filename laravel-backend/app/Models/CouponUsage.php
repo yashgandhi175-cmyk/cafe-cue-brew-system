@@ -13,7 +13,7 @@ class CouponUsage extends Model
 
     protected $fillable = [
         'id',
-        'couponId', 'orderId', 'customerId', 'billId', 'couponCodeSnapshot', 'couponNameSnapshot', 'discountTypeSnapshot', 'discountValueSnapshot', 'maximumDiscountSnapshot', 'appliedDiscountSnapshot', 'status', 'createdAt', 'reversedAt'
+        'couponId', 'orderId', 'customerId', 'billId', 'couponCodeSnapshot', 'discountTypeSnapshot', 'discountValueSnapshot', 'maximumDiscountSnapshot', 'appliedDiscountSnapshot', 'status', 'createdAt', 'reversedAt'
     ];
 
     protected $casts = [

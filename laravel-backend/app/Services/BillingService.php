@@ -14,10 +14,14 @@ use Illuminate\Support\Str;
 class BillingService
 {
     protected $calcService;
+    protected $couponService;
 
-    public function __construct(FinancialCalculationService $calcService)
-    {
+    public function __construct(
+        FinancialCalculationService $calcService,
+        CouponService $couponService
+    ) {
         $this->calcService = $calcService;
+        $this->couponService = $couponService;
     }
 
     public function getBillForOrder(string $orderId): Bill
@@ -48,7 +52,11 @@ class BillingService
             'discount' => $calc['discount'],
             'manualDiscount' => (float)$order->discount,
             'couponDiscount' => (float)$order->couponDiscount,
-            'totalDiscount' => $calc['discount'],
+'totalDiscount' => $calc['discount'],
+'appliedCouponId' => $order->couponCode
+    ? Coupon::where('code', $order->couponCode)->value('id')
+    : null,
+'appliedCouponCode' => $order->couponCode,
             'taxableAmount' => $calc['taxableAmount'],
             'cgst' => $calc['cgst'],
             'sgst' => $calc['sgst'],
@@ -250,56 +258,41 @@ class BillingService
             $order->grandTotal = $calcResult['grandTotal'];
             $order->save();
 
+            /*
+             * Coupon usage is recorded only when the bill is finalized.
+             *
+             * This runs inside finalizeBill()'s existing DB transaction,
+             * so CouponUsage and usage counters roll back automatically
+             * if bill finalization fails.
+             *
+             * CouponService::recordUsage() intentionally does not start
+             * another transaction.
+             */
+            if (
+                $bill->appliedCouponId &&
+                (float)$bill->couponDiscount > 0
+            ) {
+                $coupon = Coupon::find($bill->appliedCouponId);
+
+                if (!$coupon) {
+                    throw new \Exception(
+                        'Applied coupon no longer exists.',
+                        400
+                    );
+                }
+
+                $this->couponService->recordUsage(
+                    $coupon,
+                    $order->id,
+                    $order->customerId,
+                    $bill->id,
+                    (float)$bill->couponDiscount
+                );
+            }
+
             return $bill;
         });
     }
 
-    public function validateCoupon(string $code, float $subtotal, ?string $customerId = null): array
-    {
-        $cleanCode = strtoupper(trim($code));
-        $coupon = Coupon::where('code', $cleanCode)->where('isActive', true)->first();
 
-        if (!$coupon) {
-            throw new \Exception('Invalid or expired coupon code.', 404);
-        }
-
-        $now = now();
-        if ($coupon->startDate && strtotime($coupon->startDate) > time()) {
-            throw new \Exception('Coupon is not active yet.', 400);
-        }
-        if ($coupon->endDate && strtotime($coupon->endDate) < time()) {
-            throw new \Exception('Coupon has expired.', 400);
-        }
-
-        if ($coupon->minOrder && $subtotal < (float)$coupon->minOrder) {
-            throw new \Exception("Minimum order subtotal of ₹{$coupon->minOrder} is required for this coupon.", 400);
-        }
-
-        if ($coupon->usageLimit && $coupon->usedCount >= $coupon->usageLimit) {
-            throw new \Exception('Coupon usage limit has been reached.', 400);
-        }
-
-        $discountAmount = 0.0;
-        if ($coupon->type === 'PERCENTAGE') {
-            $discountAmount = round(($subtotal * (float)$coupon->value) / 100, 2);
-            if ($coupon->maxDiscount && $discountAmount > (float)$coupon->maxDiscount) {
-                $discountAmount = (float)$coupon->maxDiscount;
-            }
-        } else {
-            $discountAmount = (float)$coupon->value;
-        }
-
-        if ($discountAmount > $subtotal) {
-            $discountAmount = $subtotal;
-        }
-
-        return [
-            'valid' => true,
-            'couponId' => $coupon->id,
-            'code' => $coupon->code,
-            'discountType' => $coupon->type,
-            'discountValue' => (float)$coupon->value,
-            'discountAmount' => $discountAmount,
-        ];
-    }
 }

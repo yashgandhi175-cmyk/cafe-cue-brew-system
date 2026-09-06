@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Models\Coupon;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
 use App\Models\OrderStatusHistory;
@@ -18,13 +19,16 @@ class PublicOrderService
 {
     protected $cartPricingService;
     protected $financialCalcService;
+    protected $couponService;
 
     public function __construct(
         CartPricingService $cartPricingService,
-        FinancialCalculationService $financialCalcService
+        FinancialCalculationService $financialCalcService,
+        CouponService $couponService
     ) {
         $this->cartPricingService = $cartPricingService;
         $this->financialCalcService = $financialCalcService;
+        $this->couponService = $couponService;
     }
 
     private function normalizePhone(string $phone): string
@@ -123,16 +127,52 @@ class PublicOrderService
 
         $finalPhone = $this->normalizePhone($customerPhone);
 
-        // Re-fetch database prices using CartPricingService
-        $cartResult = $this->cartPricingService->resolveAndValidateCart($dto['items'] ?? []);
+// Resolve the existing customer before coupon validation.
+// This is a read-only lookup; customer creation/update remains inside the transaction.
+$existingCustomer = Customer::where('phone', $finalPhone)->first();
+$existingCustomerId = $existingCustomer?->id;
+
+// Re-fetch database prices using CartPricingService
+$cartResult = $this->cartPricingService->resolveAndValidateCart($dto['items'] ?? []);
+
+// Validate coupon against the trusted server-side subtotal and existing customer.
+$coupon = null;
+$couponDiscount = 0.0;
+
+if (!empty($dto['couponCode'])) {
+    $couponResult = $this->couponService->validate(
+        $dto['couponCode'],
+        (float)$cartResult['subtotal'],
+        $existingCustomerId
+    );
+
+            $coupon = Coupon::find($couponResult['couponId']);
+
+            if (!$coupon) {
+                throw new \Exception('Coupon not found.', 404);
+            }
+
+            $couponDiscount = (float)$couponResult['discountAmount'];
+        }
+
         $calcResult = $this->financialCalcService->calculate([
             'subtotal' => $cartResult['subtotal'],
             'manualDiscount' => 0,
-            'couponDiscount' => 0,
+            'couponDiscount' => $couponDiscount,
             'settings' => $settings,
         ]);
 
-        return DB::transaction(function () use ($dto, $idempotencyKey, $table, $customerName, $finalPhone, $cartResult, $calcResult) {
+        return DB::transaction(function () use (
+            $dto,
+            $idempotencyKey,
+            $table,
+            $customerName,
+            $finalPhone,
+            $cartResult,
+            $calcResult,
+            $coupon,
+            $couponDiscount
+        ) {
             // Find or create Customer
             $customer = Customer::where('phone', $finalPhone)->first();
             if ($customer) {
@@ -168,6 +208,8 @@ class PublicOrderService
                 'customerPhone' => $finalPhone,
                 'subtotal' => $calcResult['subtotal'],
                 'discount' => $calcResult['discount'],
+                'couponDiscount' => $calcResult['couponDiscount'],
+                'couponCode' => $coupon ? $coupon->code : null,
                 'taxableAmount' => $calcResult['taxableAmount'],
                 'cgst' => $calcResult['cgst'],
                 'sgst' => $calcResult['sgst'],

@@ -26,6 +26,7 @@ class PublicOrderController extends Controller
             'items.*.variantId' => 'nullable|string',
             'items.*.addonIds' => 'nullable|array',
             'items.*.quantity' => 'required|integer|min:1',
+            'couponCode' => 'nullable|string|max:100',
             'idempotencyKey' => 'nullable|string',
             'marketingConsent' => 'nullable|boolean',
         ]);

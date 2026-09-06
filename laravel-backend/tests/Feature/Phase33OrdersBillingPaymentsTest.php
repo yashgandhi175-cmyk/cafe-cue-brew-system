@@ -11,10 +11,13 @@ use App\Models\MenuVariant;
 use App\Models\Addon;
 use App\Models\MenuItemAddon;
 use App\Models\RestaurantTable;
+use App\Models\TableQrToken;
 use App\Models\Order;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Coupon;
+use App\Models\CouponUsage;
+use App\Services\CouponService;
 use App\Models\AuditLog;
 use App\Models\RestaurantSettings;
 use App\Support\JwtHelper;
@@ -310,6 +313,8 @@ class Phase33OrdersBillingPaymentsTest extends TestCase
 
     public function test_coupon_validation()
     {
+        Coupon::where('code', 'TESTP33WELCOME')->delete();
+
         $coupon = Coupon::create([
             'id' => (string)Str::uuid(),
             'code' => 'TESTP33WELCOME',
@@ -327,10 +332,831 @@ class Phase33OrdersBillingPaymentsTest extends TestCase
         ]);
 
         $valRes->assertStatus(200)
-            ->assertJson(['valid' => true, 'discountAmount' => 50.00]);
+    ->assertJson([
+        'valid' => true,
+        'subtotal' => 200.00,
+        'discount' => 50.00,
+    ])
+    ->assertJsonPath('coupon.discountAmount', 50);
 
         $coupon->delete();
     }
+
+    public function test_coupon_lifecycle_records_usage_on_bill_finalization()
+    {
+        $coupon = Coupon::create([
+            'id' => (string)Str::uuid(),
+            'code' => 'P33LIFECYCLE',
+            'type' => 'FLAT',
+            'value' => 50.00,
+            'minOrder' => 100.00,
+            'startDate' => now()->subDay(),
+            'endDate' => now()->addDay(),
+            'usageLimit' => 10,
+            'perCustLimit' => 1,
+            'isActive' => true,
+            'name' => 'Phase 3.3 Lifecycle Test',
+            'usedCount' => 0,
+        ]);
+
+        $customerPhone = '987654' . rand(100000, 999999);
+
+        $res = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'customerName' => 'Coupon Lifecycle Customer',
+            'customerPhone' => $customerPhone,
+            'couponCode' => 'P33LIFECYCLE',
+            'items' => [
+                [
+                    'menuItemId' => $this->menuItem->id,
+                    'quantity' => 2,
+                ],
+            ],
+            'idempotencyKey' => (string)Str::uuid(),
+        ]);
+
+        $res->assertStatus(201);
+
+        $orderId = $res->json('id');
+
+        $order = Order::find($orderId);
+
+        $this->assertNotNull($order);
+        $this->assertEquals('P33LIFECYCLE', $order->couponCode);
+        $this->assertEquals(50.00, (float)$order->couponDiscount);
+
+        $bill = Bill::where('orderId', $orderId)->first();
+
+        $this->assertNotNull($bill);
+        $this->assertEquals(50.00, (float)$bill->couponDiscount);
+        $this->assertEquals($coupon->id, $bill->appliedCouponId);
+        $this->assertEquals('P33LIFECYCLE', $bill->appliedCouponCode);
+        $this->assertEquals('DRAFT', $bill->status);
+
+        $finalize = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+        $finalize->assertStatus(200)
+            ->assertJson([
+                'status' => 'FINALIZED',
+            ]);
+
+        $bill->refresh();
+        $coupon->refresh();
+
+        $this->assertEquals('FINALIZED', $bill->status);
+        $this->assertEquals(1, $coupon->usedCount);
+
+        $this->assertDatabaseHas('CouponUsage', [
+            'couponId' => $coupon->id,
+            'orderId' => $orderId,
+            'billId' => $bill->id,
+            'customerId' => $order->customerId,
+            'couponCodeSnapshot' => 'P33LIFECYCLE',
+            'appliedDiscountSnapshot' => 50.00,
+            'status' => 'ACTIVE',
+        ]);
+
+        $this->assertDatabaseHas('CustomerCouponUsageCounter', [
+            'couponId' => $coupon->id,
+            'customerId' => $order->customerId,
+            'usageCount' => 1,
+        ]);
+
+        $usageCount = \App\Models\CouponUsage::where(
+            'billId',
+            $bill->id
+        )->count();
+
+        $this->assertEquals(1, $usageCount);
+
+        \App\Models\CouponUsage::where('billId', $bill->id)->delete();
+        \App\Models\CustomerCouponUsageCounter::where('couponId', $coupon->id)
+            ->where('customerId', $order->customerId)
+            ->delete();
+        Order::find($orderId)->items()->delete();
+        Bill::where('id', $bill->id)->delete();
+        Order::find($orderId)->delete();
+        $coupon->delete();
+    }
+
+public function test_coupon_discount_cannot_be_forged_by_client()
+{
+    $coupon = Coupon::create([
+        'id' => (string) Str::uuid(),
+        'code' => 'P33FORGED',
+        'type' => 'FLAT',
+        'value' => 20.00,
+        'minOrder' => 100.00,
+        'startDate' => now()->subDay(),
+        'endDate' => now()->addDay(),
+        'usageLimit' => 10,
+        'perCustLimit' => 10,
+        'isActive' => true,
+        'name' => 'Phase 3.3 Forged Discount Test',
+        'usedCount' => 0,
+    ]);
+
+    $response = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson('/api/orders/pos', [
+        'orderType' => 'TAKEAWAY',
+        'customerName' => 'Forged Discount Test',
+        'customerPhone' => '987660' . rand(100000, 999999),
+        'couponCode' => $coupon->code,
+
+        /*
+         * Malicious client attempts to force a ₹9999 coupon discount.
+         */
+        'couponDiscount' => 9999.00,
+
+        'items' => [
+            [
+                'menuItemId' => $this->menuItem->id,
+                'quantity' => 2,
+            ],
+        ],
+
+        'idempotencyKey' => (string) Str::uuid(),
+    ]);
+
+    $response->assertStatus(201);
+
+    $orderId = $response->json('id');
+
+    $order = Order::findOrFail($orderId);
+    $bill = Bill::where('orderId', $orderId)->firstOrFail();
+
+    /*
+     * The server must ignore the forged couponDiscount and
+     * calculate the actual coupon discount itself.
+     */
+    $this->assertEquals(
+        20.00,
+        (float) $order->couponDiscount,
+        'Order must use the server-calculated coupon discount.'
+    );
+
+    $this->assertEquals(
+        20.00,
+        (float) $bill->couponDiscount,
+        'Draft bill must use the server-calculated coupon discount.'
+    );
+
+    $this->assertNotEquals(
+        9999.00,
+        (float) $order->couponDiscount
+    );
+
+    $this->assertNotEquals(
+        9999.00,
+        (float) $bill->couponDiscount
+    );
+
+    $this->assertEquals(
+        'P33FORGED',
+        $order->couponCode
+    );
+
+    $this->assertEquals(
+        'P33FORGED',
+        $bill->appliedCouponCode
+    );
+
+    /*
+     * Finalization must continue using the trusted server-side
+     * coupon discount.
+     */
+    $finalize = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+    $finalize->assertStatus(200);
+
+    $bill->refresh();
+
+    $this->assertEquals(
+        20.00,
+        (float) $bill->couponDiscount,
+        'Finalized bill must retain the trusted coupon discount.'
+    );
+
+    $coupon->refresh();
+
+    $this->assertEquals(
+        1,
+        $coupon->usedCount
+    );
+
+    $this->assertEquals(
+        1,
+        \App\Models\CouponUsage::where(
+            'couponId',
+            $coupon->id
+        )->count()
+    );
+
+    /*
+     * Cleanup.
+     */
+    \App\Models\CouponUsage::where(
+        'couponId',
+        $coupon->id
+    )->delete();
+
+    \App\Models\CustomerCouponUsageCounter::where(
+        'couponId',
+        $coupon->id
+    )->delete();
+
+    Bill::where('id', $bill->id)->delete();
+
+    Order::find($orderId)?->items()->delete();
+    Order::where('id', $orderId)->delete();
+
+    $coupon->delete();
+}
+
+    public function test_coupon_finalization_is_idempotent_for_usage()
+    {
+        $coupon = Coupon::create([
+            'id' => (string)Str::uuid(),
+            'code' => 'P33IDEMPOTENT',
+            'type' => 'FLAT',
+            'value' => 25.00,
+            'minOrder' => 100.00,
+            'startDate' => now()->subDay(),
+            'endDate' => now()->addDay(),
+            'usageLimit' => 10,
+            'perCustLimit' => 2,
+            'isActive' => true,
+            'name' => 'Phase 3.3 Idempotency Test',
+            'usedCount' => 0,
+        ]);
+
+        $customerPhone = '987655' . rand(100000, 999999);
+
+        $res = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'customerName' => 'Coupon Idempotency Customer',
+            'customerPhone' => $customerPhone,
+            'couponCode' => 'P33IDEMPOTENT',
+            'items' => [
+                [
+                    'menuItemId' => $this->menuItem->id,
+                    'quantity' => 2,
+                ],
+            ],
+            'idempotencyKey' => (string)Str::uuid(),
+        ]);
+
+        $res->assertStatus(201);
+
+        $orderId = $res->json('id');
+
+        $finalize1 = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+        $finalize1->assertStatus(200);
+
+        $billId = $finalize1->json('id');
+
+        $finalize2 = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+        $finalize2->assertStatus(200)
+            ->assertJson([
+                'id' => $billId,
+                'status' => 'FINALIZED',
+            ]);
+
+        $coupon->refresh();
+
+        $this->assertEquals(1, $coupon->usedCount);
+
+        $this->assertEquals(
+            1,
+            \App\Models\CouponUsage::where('billId', $billId)->count()
+        );
+
+        $counter = \App\Models\CustomerCouponUsageCounter::where(
+            'couponId',
+            $coupon->id
+        )->where(
+            'customerId',
+            Order::find($orderId)->customerId
+        )->first();
+
+        $this->assertNotNull($counter);
+        $this->assertEquals(1, $counter->usageCount);
+
+        \App\Models\CouponUsage::where('billId', $billId)->delete();
+        \App\Models\CustomerCouponUsageCounter::where('couponId', $coupon->id)
+            ->where(
+                'customerId',
+                Order::find($orderId)->customerId
+            )
+            ->delete();
+        Order::find($orderId)->items()->delete();
+        Bill::where('id', $billId)->delete();
+        Order::find($orderId)->delete();
+        $coupon->delete();
+    }
+
+   public function test_coupon_per_customer_limit_is_enforced_at_order_creation()
+{
+    $coupon = Coupon::create([
+        'id' => (string)Str::uuid(),
+        'code' => 'P33PER-' . strtoupper(Str::random(8)),
+        'type' => 'FLAT',
+        'value' => 20.00,
+        'minOrder' => 100.00,
+        'startDate' => now()->subDay(),
+        'endDate' => now()->addDay(),
+        'usageLimit' => 10,
+        'perCustLimit' => 1,
+        'isActive' => true,
+        'name' => 'Phase 3.3 Per Customer Limit',
+        'usedCount' => 0,
+    ]);
+
+    $customerPhone = '987656' . rand(100000, 999999);
+
+    $createOrder = function () use ($customerPhone, $coupon) {
+        return $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'customerName' => 'Per Customer Limit Test',
+            'customerPhone' => $customerPhone,
+            'couponCode' => $coupon->code,
+            'items' => [
+                [
+                    'menuItemId' => $this->menuItem->id,
+                    'quantity' => 2,
+                ],
+            ],
+            'idempotencyKey' => (string)Str::uuid(),
+        ]);
+    };
+
+    // First order should be accepted.
+    $response1 = $createOrder();
+    $response1->assertStatus(201);
+
+    $orderId1 = $response1->json('id');
+    $order1 = Order::find($orderId1);
+
+    $this->assertNotNull($order1);
+
+    // Finalize first order so coupon usage is recorded.
+    $finalize1 = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson("/api/billing/orders/{$orderId1}/finalize");
+
+    $finalize1->assertStatus(200);
+
+    $coupon->refresh();
+
+    $this->assertEquals(1, $coupon->usedCount);
+
+    // Second order for the same customer should now be rejected
+    // during order creation because the per-customer limit is 1.
+    $response2 = $createOrder();
+
+    $response2->assertStatus(400)
+        ->assertJson([
+            'message' => 'You have reached the usage limit for this coupon.',
+            'statusCode' => 400,
+        ]);
+
+    // Confirm no second order was created.
+    $this->assertEquals(
+        1,
+        Order::where('customerId', $order1->customerId)
+            ->where('couponCode', $coupon->code)
+            ->count()
+    );
+
+    // Coupon usage must remain exactly one.
+    $coupon->refresh();
+
+    $this->assertEquals(1, $coupon->usedCount);
+
+    $usageCount = CouponUsage::where('couponId', $coupon->id)
+        ->where('customerId', $order1->customerId)
+        ->count();
+
+    $this->assertEquals(1, $usageCount);
+
+    // Cleanup.
+    CouponUsage::where('couponId', $coupon->id)->delete();
+    \App\Models\CustomerCouponUsageCounter::where('couponId', $coupon->id)->delete();
+
+    Bill::where('orderId', $orderId1)->delete();
+    Order::find($orderId1)->items()->delete();
+    Order::find($orderId1)->delete();
+    $coupon->delete();
+}
+
+public function test_public_order_enforces_coupon_per_customer_limit_at_order_creation()
+{
+    $coupon = Coupon::create([
+        'id' => (string)Str::uuid(),
+        'code' => 'P33PUBLIC-' . strtoupper(Str::random(8)),
+        'type' => 'FLAT',
+        'value' => 20.00,
+        'minOrder' => 100.00,
+        'startDate' => now()->subDay(),
+        'endDate' => now()->addDay(),
+        'usageLimit' => 10,
+        'perCustLimit' => 1,
+        'isActive' => true,
+        'name' => 'Phase 3.3 Public Per Customer Limit',
+        'usedCount' => 0,
+    ]);
+
+    $qrToken = 'P33QR-' . strtoupper(Str::random(12));
+
+    TableQrToken::create([
+        'id' => (string)Str::uuid(),
+        'tableId' => $this->table->id,
+        'token' => $qrToken,
+        'createdAt' => now(),
+    ]);
+
+    // Enable public QR ordering for this test.
+    $settings = RestaurantSettings::find('default');
+    $settings->qrOrderingEnabled = true;
+    $settings->save();
+
+    $customerPhone = '987657' . rand(100000, 999999);
+
+    $createPublicOrder = function () use ($customerPhone, $coupon, $qrToken) {
+        return $this->postJson('/api/public/orders', [
+            'tableId' => $this->table->id,
+            'token' => $qrToken,
+            'customerName' => 'Public Coupon Test',
+            'customerPhone' => $customerPhone,
+            'couponCode' => $coupon->code,
+            'items' => [
+                [
+                    'menuItemId' => $this->menuItem->id,
+                    'quantity' => 2,
+                ],
+            ],
+            'idempotencyKey' => (string)Str::uuid(),
+        ]);
+    };
+
+    // First public order should be accepted.
+    $response1 = $createPublicOrder();
+    $response1->assertStatus(201);
+
+    $orderId1 = $response1->json('id');
+    $order1 = Order::find($orderId1);
+
+    $this->assertNotNull($order1);
+    $this->assertEquals(20.00, (float)$order1->couponDiscount);
+    $this->assertEquals($coupon->code, $order1->couponCode);
+
+    // Finalize the first order so coupon usage is recorded.
+    $finalize1 = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson("/api/billing/orders/{$orderId1}/finalize");
+
+    $finalize1->assertStatus(200);
+
+    $coupon->refresh();
+
+    $this->assertEquals(1, $coupon->usedCount);
+
+    // Second public order for the same customer must be rejected
+    // during order creation because perCustLimit = 1.
+    $response2 = $createPublicOrder();
+
+    $response2->assertStatus(400)
+        ->assertJson([
+            'message' => 'You have reached the usage limit for this coupon.',
+            'statusCode' => 400,
+        ]);
+
+    // Only the first coupon order should exist.
+    $this->assertEquals(
+        1,
+        Order::where('customerId', $order1->customerId)
+            ->where('couponCode', $coupon->code)
+            ->count()
+    );
+
+    $coupon->refresh();
+
+    $this->assertEquals(1, $coupon->usedCount);
+
+    $usageCount = CouponUsage::where('couponId', $coupon->id)
+        ->where('customerId', $order1->customerId)
+        ->count();
+
+    $this->assertEquals(1, $usageCount);
+
+    // Cleanup.
+    CouponUsage::where('couponId', $coupon->id)->delete();
+    \App\Models\CustomerCouponUsageCounter::where('couponId', $coupon->id)->delete();
+
+    Bill::where('orderId', $orderId1)->delete();
+    Order::find($orderId1)->items()->delete();
+    Order::find($orderId1)->delete();
+    $coupon->delete();
+    TableQrToken::where('tableId', $this->table->id)
+        ->where('token', $qrToken)
+        ->delete();
+}
+
+    public function test_coupon_global_usage_limit_is_enforced_at_finalization()
+    {
+        $coupon = Coupon::create([
+            'id' => (string) Str::uuid(),
+            'code' => 'P33GLOBAL',
+            'type' => 'FLAT',
+            'value' => 20.00,
+            'minOrder' => 100.00,
+            'startDate' => now()->subDay(),
+            'endDate' => now()->addDay(),
+            'usageLimit' => 1,
+            'perCustLimit' => 10,
+            'isActive' => true,
+            'name' => 'Phase 3.3 Global Limit',
+            'usedCount' => 0,
+        ]);
+
+        $createOrder = function (string $phone) use ($coupon) {
+            $response = $this->withHeader(
+                'Authorization',
+                'Bearer ' . $this->cashierToken
+            )->postJson('/api/orders/pos', [
+                'orderType' => 'TAKEAWAY',
+                'customerName' => 'Global Limit Test',
+                'customerPhone' => $phone,
+                'couponCode' => $coupon->code,
+                'items' => [
+                    [
+                        'menuItemId' => $this->menuItem->id,
+                        'quantity' => 2,
+                    ],
+                ],
+                'idempotencyKey' => (string) Str::uuid(),
+            ]);
+
+            $response->assertStatus(201);
+
+            return $response->json('id');
+        };
+
+        /*
+         * Create both orders before either one is finalized.
+         * The coupon usage count is still zero, so both orders
+         * legitimately pass initial validation.
+         */
+        $orderId1 = $createOrder('987657' . rand(100000, 999999));
+        $orderId2 = $createOrder('987658' . rand(100000, 999999));
+
+        /*
+         * First finalization consumes the only global coupon usage.
+         */
+        $finalize1 = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson("/api/billing/orders/{$orderId1}/finalize");
+
+        $finalize1->assertStatus(200);
+
+        $coupon->refresh();
+
+        $this->assertEquals(1, $coupon->usedCount);
+
+        /*
+         * Second finalization must re-check the global usage limit
+         * while the coupon row is locked.
+         */
+        $finalize2 = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson("/api/billing/orders/{$orderId2}/finalize");
+
+        $finalize2->assertStatus(400)
+            ->assertJson([
+                'message' => 'Coupon usage limit has been reached.',
+                'statusCode' => 400,
+            ]);
+
+        $coupon->refresh();
+
+        $this->assertEquals(1, $coupon->usedCount);
+
+        $this->assertEquals(
+            1,
+            \App\Models\CouponUsage::where(
+                'couponId',
+                $coupon->id
+            )->count()
+        );
+
+        $bill2 = Bill::where('orderId', $orderId2)->first();
+
+        \App\Models\CouponUsage::where(
+            'couponId',
+            $coupon->id
+        )->delete();
+
+        \App\Models\CustomerCouponUsageCounter::where(
+            'couponId',
+            $coupon->id
+        )->delete();
+
+        Order::find($orderId1)->items()->delete();
+        Order::find($orderId2)->items()->delete();
+
+        $bill1 = Bill::where('orderId', $orderId1)->first();
+
+        if ($bill1) {
+            Bill::where('id', $bill1->id)->delete();
+        }
+
+        if ($bill2) {
+            Bill::where('id', $bill2->id)->delete();
+        }
+
+        Order::find($orderId1)->delete();
+        Order::find($orderId2)->delete();
+
+        $coupon->delete();
+    }
+public function test_coupon_finalization_rolls_back_when_coupon_usage_fails()
+{
+    $coupon = Coupon::create([
+        'id' => (string) Str::uuid(),
+        'code' => 'P33ROLLBACK',
+        'type' => 'FLAT',
+        'value' => 20.00,
+        'minOrder' => 100.00,
+        'startDate' => now()->subDay(),
+        'endDate' => now()->addDay(),
+        'usageLimit' => 10,
+        'perCustLimit' => 10,
+        'isActive' => true,
+        'name' => 'Phase 3.3 Rollback Test',
+        'usedCount' => 0,
+    ]);
+
+    $response = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson('/api/orders/pos', [
+        'orderType' => 'TAKEAWAY',
+        'customerName' => 'Rollback Test',
+        'customerPhone' => '987659' . rand(100000, 999999),
+        'couponCode' => $coupon->code,
+        'items' => [
+            [
+                'menuItemId' => $this->menuItem->id,
+                'quantity' => 2,
+            ],
+        ],
+        'idempotencyKey' => (string) Str::uuid(),
+    ]);
+
+    $response->assertStatus(201);
+
+    $orderId = $response->json('id');
+
+    $order = Order::findOrFail($orderId);
+    $bill = Bill::where('orderId', $orderId)->firstOrFail();
+
+    $this->assertEquals(20.00, (float) $order->couponDiscount);
+    $this->assertEquals(20.00, (float) $bill->couponDiscount);
+    $this->assertEquals('P33ROLLBACK', $bill->appliedCouponCode);
+
+    /*
+     * Replace CouponService with a mock that fails when usage
+     * is recorded. This happens inside BillingService's
+     * DB::transaction(), so all changes must roll back.
+     */
+    $mock = \Mockery::mock(CouponService::class);
+
+    $mock->shouldReceive('recordUsage')
+        ->once()
+        ->andThrow(new \Exception(
+            'Forced coupon usage failure for rollback test.',
+            400
+        ));
+
+    $this->app->instance(CouponService::class, $mock);
+
+    $finalize = $this->withHeader(
+        'Authorization',
+        'Bearer ' . $this->cashierToken
+    )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+    $finalize->assertStatus(400)
+        ->assertJson([
+            'message' => 'Forced coupon usage failure for rollback test.',
+            'statusCode' => 400,
+        ]);
+
+    /*
+     * Coupon itself must remain untouched.
+     */
+    $coupon->refresh();
+
+    $this->assertEquals(
+        0,
+        $coupon->usedCount,
+        'Coupon usedCount must roll back.'
+    );
+
+    /*
+     * No usage record should exist.
+     */
+    $this->assertEquals(
+        0,
+        \App\Models\CouponUsage::where(
+            'couponId',
+            $coupon->id
+        )->count(),
+        'CouponUsage must roll back.'
+    );
+
+    /*
+     * No customer usage counter should exist.
+     */
+    $this->assertEquals(
+        0,
+        \App\Models\CustomerCouponUsageCounter::where(
+            'couponId',
+            $coupon->id
+        )->count(),
+        'Customer coupon counter must roll back.'
+    );
+
+    /*
+     * Bill must still be DRAFT.
+     */
+    $bill->refresh();
+
+    $this->assertEquals(
+        'DRAFT',
+        $bill->status,
+        'Bill must remain DRAFT after failed finalization.'
+    );
+
+    /*
+     * Order financial state must also remain unchanged.
+     */
+    $order->refresh();
+
+    $this->assertEquals(
+        20.00,
+        (float) $order->couponDiscount,
+        'Order coupon discount must remain intact.'
+    );
+
+    /*
+     * Cleanup.
+     */
+    Bill::where('id', $bill->id)->delete();
+
+    Order::find($orderId)?->items()->delete();
+    Order::where('id', $orderId)->delete();
+
+    \App\Models\CouponUsage::where(
+        'couponId',
+        $coupon->id
+    )->delete();
+
+    \App\Models\CustomerCouponUsageCounter::where(
+        'couponId',
+        $coupon->id
+    )->delete();
+
+    $coupon->delete();
+}
 
     // ==========================================
     // PAYMENTS & SPLIT PAYMENTS

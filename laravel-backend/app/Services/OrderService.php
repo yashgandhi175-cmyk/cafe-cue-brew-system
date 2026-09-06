@@ -14,7 +14,7 @@ use App\Models\AuditLog;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
 use App\Models\LoyaltyTransaction;
-use App\Models\CouponUsage;
+use App\Models\Coupon;
 use App\Models\Ingredient;
 use App\Models\Recipe;
 use App\Models\StockTransaction;
@@ -28,13 +28,16 @@ class OrderService
 {
     protected $cartPricingService;
     protected $financialCalcService;
+    protected $couponService;
 
     public function __construct(
         CartPricingService $cartPricingService,
-        FinancialCalculationService $financialCalcService
+        FinancialCalculationService $financialCalcService,
+        CouponService $couponService
     ) {
         $this->cartPricingService = $cartPricingService;
         $this->financialCalcService = $financialCalcService;
+        $this->couponService = $couponService;
     }
 
     private function normalizePhone(string $phone): string
@@ -93,8 +96,33 @@ class OrderService
         $finalPhone = !empty($rawPhone) ? $this->normalizePhone($rawPhone) : '+910000000000';
         $customerNameVal = !empty($dto['customerName']) ? trim($dto['customerName']) : 'Walk-in Customer';
 
-        // Re-fetch database item, variant, addon prices using CartPricingService
-        $cartResult = $this->cartPricingService->resolveAndValidateCart($dto['items'] ?? []);
+        // Resolve the existing customer before coupon validation.
+// This is a read-only lookup; customer creation/update remains inside the transaction.
+$existingCustomer = Customer::where('phone', $finalPhone)->first();
+$existingCustomerId = $existingCustomer?->id;
+
+// Re-fetch database item, variant, addon prices using CartPricingService
+$cartResult = $this->cartPricingService->resolveAndValidateCart($dto['items'] ?? []);
+
+// Validate coupon against the trusted server-side subtotal and existing customer.
+$coupon = null;
+$couponDiscount = 0.0;
+
+if (!empty($dto['couponCode'])) {
+    $couponResult = $this->couponService->validate(
+        $dto['couponCode'],
+        (float)$cartResult['subtotal'],
+        $existingCustomerId
+    );
+
+            $coupon = Coupon::find($couponResult['couponId']);
+
+            if (!$coupon) {
+                throw new \Exception('Coupon not found.', 404);
+            }
+
+            $couponDiscount = (float)$couponResult['discountAmount'];
+        }
 
         // Manual discount calculation
         $manualDiscountAmount = 0.0;
@@ -110,11 +138,24 @@ class OrderService
         $calcResult = $this->financialCalcService->calculate([
             'subtotal' => $cartResult['subtotal'],
             'manualDiscount' => $manualDiscountAmount,
-            'couponDiscount' => 0,
+            'couponDiscount' => $couponDiscount,
             'settings' => $settings,
         ]);
 
-        return DB::transaction(function () use ($dto, $staffId, $role, $orderType, $idempotencyKey, $table, $finalPhone, $customerNameVal, $cartResult, $calcResult) {
+        return DB::transaction(function () use (
+            $dto,
+            $staffId,
+            $role,
+            $orderType,
+            $idempotencyKey,
+            $table,
+            $finalPhone,
+            $customerNameVal,
+            $cartResult,
+            $calcResult,
+            $coupon,
+            $couponDiscount
+        ) {
             $customer = Customer::where('phone', $finalPhone)->first();
             if ($customer) {
                 $customer->name = $customerNameVal;
@@ -152,6 +193,7 @@ class OrderService
                 'subtotal' => $calcResult['subtotal'],
                 'discount' => $calcResult['discount'],
                 'couponDiscount' => $calcResult['couponDiscount'],
+                'couponCode' => $coupon ? $coupon->code : null,
                 'taxableAmount' => $calcResult['taxableAmount'],
                 'cgst' => $calcResult['cgst'],
                 'sgst' => $calcResult['sgst'],
@@ -208,8 +250,10 @@ class OrderService
                 'subtotal' => $calcResult['subtotal'],
                 'discount' => $calcResult['discount'],
                 'manualDiscount' => $calcResult['manualDiscount'],
-                'couponDiscount' => 0.0,
+                'couponDiscount' => $couponDiscount,
                 'totalDiscount' => $calcResult['discount'],
+                'appliedCouponId' => $coupon ? $coupon->id : null,
+                'appliedCouponCode' => $coupon ? $coupon->code : null,
                 'taxableAmount' => $calcResult['taxableAmount'],
                 'cgst' => $calcResult['cgst'],
                 'sgst' => $calcResult['sgst'],

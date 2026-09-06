@@ -29,6 +29,7 @@ class OrderController extends Controller
             'items.*.notes' => 'nullable|string',
             'manualDiscountType' => 'nullable|string|in:FLAT,PERCENTAGE',
             'manualDiscountValue' => 'nullable|numeric|min:0',
+            'couponCode' => 'nullable|string|max:100',
             'idempotencyKey' => 'nullable|string',
             'marketingConsent' => 'nullable|boolean',
             'notes' => 'nullable|string',
