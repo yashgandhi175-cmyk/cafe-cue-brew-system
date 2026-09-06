@@ -424,6 +424,84 @@ class AuthenticationTest extends TestCase
         $staff->delete();
     }
 
+public function test_change_pin_revokes_other_active_sessions_but_keeps_current_session(): void
+{
+    $staffId = (string)Str::uuid();
+
+    $staff = Staff::create([
+        'id' => $staffId,
+        'name' => 'Multi Session PIN Staff',
+        'phone' => $this->randomPhone(),
+        'role' => 'CASHIER',
+        'pinHash' => Hash::make('1234'),
+        'mustChangePin' => true,
+        'status' => 'ACTIVE',
+    ]);
+
+    $currentSessionId = (string)Str::uuid();
+    $currentToken = JwtHelper::generateToken([
+        'sub' => $staffId,
+        'role' => 'CASHIER',
+        'sid' => $currentSessionId,
+    ], env('JWT_SECRET', 'dev-secret-key'));
+
+    $otherSessionId = (string)Str::uuid();
+    $otherToken = JwtHelper::generateToken([
+        'sub' => $staffId,
+        'role' => 'CASHIER',
+        'sid' => $otherSessionId,
+    ], env('JWT_SECRET', 'dev-secret-key'));
+
+    StaffSession::create([
+        'id' => $currentSessionId,
+        'staffId' => $staffId,
+        'token' => hash('sha256', $currentToken),
+        'expiredAt' => date('Y-m-d H:i:s', time() + 43200),
+        'isActive' => true,
+        'createdAt' => date('Y-m-d H:i:s'),
+    ]);
+
+    StaffSession::create([
+        'id' => $otherSessionId,
+        'staffId' => $staffId,
+        'token' => hash('sha256', $otherToken),
+        'expiredAt' => date('Y-m-d H:i:s', time() + 43200),
+        'isActive' => true,
+        'createdAt' => date('Y-m-d H:i:s'),
+    ]);
+
+    $response = $this->withHeader('Authorization', 'Bearer ' . $currentToken)
+        ->postJson('/api/auth/change-pin', [
+            'currentPin' => '1234',
+            'newPin' => '5678',
+        ]);
+
+    $response->assertStatus(200);
+
+    $this->assertDatabaseHas('StaffSession', [
+        'id' => $currentSessionId,
+        'isActive' => true,
+    ]);
+
+    $this->assertDatabaseHas('StaffSession', [
+        'id' => $otherSessionId,
+        'isActive' => false,
+    ]);
+
+    $currentResponse = $this->withHeader('Authorization', 'Bearer ' . $currentToken)
+        ->getJson('/api/auth/me');
+
+    $currentResponse->assertStatus(200);
+
+    $otherResponse = $this->withHeader('Authorization', 'Bearer ' . $otherToken)
+        ->getJson('/api/auth/me');
+
+    $otherResponse->assertStatus(401);
+
+    $staff->sessions()->delete();
+    $staff->delete();
+}
+
     public function test_must_change_pin_flag_reflected()
     {
         $staffId = (string)Str::uuid();

@@ -162,7 +162,13 @@ class AuthService
         ]);
     }
 
-    public function changePin(Staff $staff, string $currentPin, string $newPin, ?string $ipAddress = null): array
+    public function changePin(
+    Staff $staff,
+    string $currentPin,
+    string $newPin,
+    ?string $ipAddress = null,
+    ?string $currentSessionId = null
+): array
     {
         $settings = RestaurantSettings::find('default');
         $pinLength = $settings ? $settings->pinLength : 4;
@@ -176,8 +182,17 @@ class AuthService
         }
 
         $staff->pinHash = Hash::make($newPin);
-        $staff->mustChangePin = false;
-        $staff->save();
+$staff->mustChangePin = false;
+$staff->save();
+
+// Revoke all other active sessions after a PIN change.
+// Keep the current authenticated session active.
+StaffSession::where('staffId', $staff->id)
+    ->where('isActive', true)
+    ->when($currentSessionId, function ($query) use ($currentSessionId) {
+        $query->where('id', '!=', $currentSessionId);
+    })
+    ->update(['isActive' => false]);
 
         AuditLog::create([
             'id' => (string)Str::uuid(),

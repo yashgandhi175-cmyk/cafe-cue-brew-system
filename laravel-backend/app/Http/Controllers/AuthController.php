@@ -66,11 +66,12 @@ class AuthController extends Controller
 
         try {
             $result = $this->authService->changePin(
-                $staff,
-                $request->input('currentPin'),
-                $request->input('newPin'),
-                $request->ip()
-            );
+    $staff,
+    $request->input('currentPin'),
+    $request->input('newPin'),
+    $request->ip(),
+    $request->attributes->get('auth_session_id')
+);
             return response()->json($result);
         } catch (\Exception $e) {
             $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
