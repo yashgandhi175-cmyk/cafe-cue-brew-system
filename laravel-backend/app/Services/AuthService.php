@@ -148,19 +148,18 @@ class AuthService
         ];
     }
 
-    public function logout(string $token, string $staffId, ?string $ipAddress = null): void
-    {
-        $tokenHash = hash('sha256', $token);
-        StaffSession::where('token', $tokenHash)->orWhere('id', $token)->delete();
+    public function logout(string $sessionId, string $staffId, ?string $ipAddress = null): void
+{
+    StaffSession::where('id', $sessionId)->delete();
 
-        AuditLog::create([
-            'id' => (string)Str::uuid(),
-            'staffId' => $staffId,
-            'action' => 'LOGOUT',
-            'ipAddress' => $ipAddress,
-            'createdAt' => now(),
-        ]);
-    }
+    AuditLog::create([
+        'id' => (string)Str::uuid(),
+        'staffId' => $staffId,
+        'action' => 'LOGOUT',
+        'ipAddress' => $ipAddress,
+        'createdAt' => now(),
+    ]);
+}
 
     public function changePin(
     Staff $staff,

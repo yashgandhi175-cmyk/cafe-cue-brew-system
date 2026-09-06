@@ -31,17 +31,16 @@ class AuthController extends Controller
     }
 
     public function logout(Request $request)
-    {
-        $staff = $request->attributes->get('auth_staff');
-        $header = $request->header('Authorization');
-        $token = $header && str_starts_with($header, 'Bearer ') ? substr($header, 7) : '';
+{
+    $staff = $request->attributes->get('auth_staff');
+    $sessionId = $request->attributes->get('auth_session_id');
 
-        if ($staff) {
-            $this->authService->logout($token, $staff->id, $request->ip());
-        }
-
-        return response()->json(['message' => 'Logged out successfully']);
+    if ($staff && $sessionId) {
+        $this->authService->logout($sessionId, $staff->id, $request->ip());
     }
+
+    return response()->json(['message' => 'Logged out successfully']);
+}
 
     public function me(Request $request)
     {
