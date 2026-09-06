@@ -136,11 +136,24 @@ class TableService
     public function shiftTable(string $sourceTableId, string $targetTableId, ?string $staffId = null): array
     {
         return DB::transaction(function () use ($sourceTableId, $targetTableId) {
-            $source = RestaurantTable::find($sourceTableId);
-            $target = RestaurantTable::find($targetTableId);
+            if ($sourceTableId === $targetTableId) {
+                throw new \Exception('Source and target tables must be different.', 422);
+            }
+
+            $tables = RestaurantTable::whereIn('id', [$sourceTableId, $targetTableId])
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $source = $tables->get($sourceTableId);
+            $target = $tables->get($targetTableId);
 
             if (!$source || !$target) {
                 throw new \Exception('Source or target table not found.', 404);
+            }
+
+            if (!$source->isActive || !$target->isActive) {
+                throw new \Exception('Source and target tables must be active.', 422);
             }
 
             Order::where('tableId', $sourceTableId)
@@ -160,16 +173,43 @@ class TableService
     public function mergeTables(string $primaryTableId, array $secondaryTableIds, ?string $staffId = null): array
     {
         return DB::transaction(function () use ($primaryTableId, $secondaryTableIds) {
-            $primary = RestaurantTable::find($primaryTableId);
-            if (!$primary) {
-                throw new \Exception('Primary table not found.', 404);
+            $secondaryTableIds = array_values(array_unique($secondaryTableIds));
+
+            if (empty($secondaryTableIds)) {
+                throw new \Exception('At least one secondary table is required.', 422);
             }
+
+            if (in_array($primaryTableId, $secondaryTableIds, true)) {
+                throw new \Exception('Primary table cannot be included in secondary tables.', 422);
+            }
+
+            $allTableIds = array_values(array_unique(
+                array_merge([$primaryTableId], $secondaryTableIds)
+            ));
+
+            $tables = RestaurantTable::whereIn('id', $allTableIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($tables->count() !== count($allTableIds)) {
+                throw new \Exception('One or more tables were not found.', 404);
+            }
+
+            foreach ($allTableIds as $tableId) {
+                if (!$tables->get($tableId)->isActive) {
+                    throw new \Exception('All tables must be active.', 422);
+                }
+            }
+
+            $primary = $tables->get($primaryTableId);
 
             Order::whereIn('tableId', $secondaryTableIds)
                 ->whereIn('status', ['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY'])
                 ->update(['tableId' => $primaryTableId]);
 
-            RestaurantTable::whereIn('id', $secondaryTableIds)->update(['status' => 'AVAILABLE']);
+            RestaurantTable::whereIn('id', $secondaryTableIds)
+                ->update(['status' => 'AVAILABLE']);
 
             $primary->status = 'OCCUPIED';
             $primary->save();

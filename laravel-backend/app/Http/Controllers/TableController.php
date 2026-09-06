@@ -87,7 +87,7 @@ class TableController extends Controller
     public function shiftTable(Request $request)
     {
         $data = $request->validate([
-            'sourceTableId' => 'required|string|exists:RestaurantTable,id',
+            'sourceTableId' => 'required|string|exists:RestaurantTable,id|different:targetTableId',
             'targetTableId' => 'required|string|exists:RestaurantTable,id',
         ]);
 
@@ -105,8 +105,8 @@ class TableController extends Controller
     {
         $data = $request->validate([
             'primaryTableId' => 'required|string|exists:RestaurantTable,id',
-            'secondaryTableIds' => 'required|array',
-            'secondaryTableIds.*' => 'string|exists:RestaurantTable,id',
+            'secondaryTableIds' => 'required|array|min:1',
+            'secondaryTableIds.*' => 'string|exists:RestaurantTable,id|distinct',
         ]);
 
         $staff = $request->attributes->get('auth_staff');
