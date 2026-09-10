@@ -408,9 +408,59 @@ class Phase35CrmLoyaltyCreditExpenseTest extends TestCase
         $credAnalRes->assertStatus(200)
             ->assertJsonStructure(['totalOutstanding', 'todaysCreditSales']);
 
+        // Security: a payment must not allow one customer's ID to be paired
+        // with another customer's credit ledger.
+        $otherCustomer = Customer::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Other Credit Client P35',
+            'phone' => '+9197' . random_int(10000000, 99999999),
+        ]);
+
+        $otherLedger = CreditLedger::create([
+            'id' => (string)Str::uuid(),
+            'customerId' => $otherCustomer->id,
+            'invoiceNumber' => 'CCB-2026-CR-OTHER-' . Str::uuid(),
+            'invoiceDate' => now(),
+            'billAmount' => 750.00,
+            'outstandingAmount' => 750.00,
+            'creditDate' => now(),
+            'dueDate' => date('Y-m-d H:i:s', time() + 86400 * 7),
+            'creditType' => 'MONTHLY',
+            'settlementStatus' => 'UNPAID',
+            'createdById' => $this->owner->id,
+        ]);
+
+        $otherOutstandingBefore = (float)$otherLedger->outstandingAmount;
+        $otherPaymentCountBefore = CreditPayment::where('creditLedgerId', $otherLedger->id)->count();
+
+        $crossCustomerPayRes = $this->withHeader('Authorization', 'Bearer ' .
+            $this->cashierToken)->postJson('/api/credits/payment', [
+            'customerId' => $customer->id,
+            'ledgerId' => $otherLedger->id,
+            'amount' => 100.00,
+            'method' => 'CASH',
+        ]);
+
+        $crossCustomerPayRes->assertStatus(403)
+            ->assertJson([
+                'message' => 'The selected credit ledger does not belong to the selected customer.',
+                'statusCode' => 403,
+            ]);
+
+        $otherLedger->refresh();
+
+        $this->assertEquals($otherOutstandingBefore, (float)$otherLedger->outstandingAmount);
+        $this->assertSame(
+            $otherPaymentCountBefore,
+            CreditPayment::where('creditLedgerId', $otherLedger->id)->count()
+        );
+
         CreditPayment::where('creditLedgerId', $ledger->id)->delete();
+        CreditPayment::where('creditLedgerId', $otherLedger->id)->delete();
         CreditLedger::destroy($ledger->id);
+        CreditLedger::destroy($otherLedger->id);
         Customer::destroy($customer->id);
+        Customer::destroy($otherCustomer->id);
     }
 
     // ==========================================

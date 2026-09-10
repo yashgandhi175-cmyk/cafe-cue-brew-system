@@ -222,6 +222,10 @@ class CreditService
                 $ledger = CreditLedger::where('id', $ledgerId)->lockForUpdate()->first();
                 if (!$ledger) throw new \Exception('Credit ledger entry not found.', 404);
 
+                if ($customerId !== null && $ledger->customerId !== $customerId) {
+                    throw new \Exception('The selected credit ledger does not belong to the selected customer.', 403);
+                }
+
                 $outstanding = (float)$ledger->outstandingAmount;
                 if ($outstanding <= 0) {
                     throw new \Exception('This invoice has already been fully paid.', 400);
