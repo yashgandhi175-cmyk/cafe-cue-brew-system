@@ -95,7 +95,7 @@ Route::middleware(['jwt.auth'])->group(function () {
     Route::post('/auth/change-pin', [AuthController::class, 'changePin']);
 
     // Staff Management
-    Route::middleware(['role:OWNER,MANAGER'])->group(function () {
+    Route::middleware(['role:OWNER'])->group(function () {
         Route::get('/staff', [StaffController::class, 'index']);
         Route::post('/staff', [StaffController::class, 'store']);
         Route::put('/staff/{id}', [StaffController::class, 'update']);

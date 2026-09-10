@@ -14,8 +14,10 @@ class SecurityHardeningAuditTest extends TestCase
 {
     protected string $ownerId;
     protected string $waiterId;
+    protected string $managerId;
     protected string $ownerToken;
     protected string $waiterToken;
+    protected string $managerToken;
 
     protected function setUp(): void
     {
@@ -23,6 +25,7 @@ class SecurityHardeningAuditTest extends TestCase
 
         $this->ownerId = (string)Str::uuid();
         $this->waiterId = (string)Str::uuid();
+        $this->managerId = (string)Str::uuid();
 
         Staff::create([
             'id' => $this->ownerId,
@@ -42,8 +45,18 @@ class SecurityHardeningAuditTest extends TestCase
             'status' => 'ACTIVE',
         ]);
 
+        Staff::create([
+            'id' => $this->managerId,
+            'name' => 'Security Audit Manager',
+            'phone' => '9999966666',
+            'role' => 'MANAGER',
+            'pinHash' => Hash::make('1234'),
+            'status' => 'ACTIVE',
+        ]);
+
         $ownerSid = (string)Str::uuid();
         $waiterSid = (string)Str::uuid();
+        $managerSid = (string)Str::uuid();
 
         \App\Models\StaffSession::create([
             'id' => $ownerSid,
@@ -61,13 +74,22 @@ class SecurityHardeningAuditTest extends TestCase
             'isActive' => true,
         ]);
 
+        \App\Models\StaffSession::create([
+            'id' => $managerSid,
+            'staffId' => $this->managerId,
+            'token' => hash('sha256', JwtHelper::generateToken(['sub' => $this->managerId, 'role' => 'MANAGER', 'sid' => $managerSid], env('JWT_SECRET', 'test-jwt-secret'))),
+            'expiredAt' => now()->addHours(12),
+            'isActive' => true,
+        ]);
+
         $this->ownerToken = JwtHelper::generateToken(['sub' => $this->ownerId, 'role' => 'OWNER', 'sid' => $ownerSid], env('JWT_SECRET', 'test-jwt-secret'));
         $this->waiterToken = JwtHelper::generateToken(['sub' => $this->waiterId, 'role' => 'WAITER', 'sid' => $waiterSid], env('JWT_SECRET', 'test-jwt-secret'));
+        $this->managerToken = JwtHelper::generateToken(['sub' => $this->managerId, 'role' => 'MANAGER', 'sid' => $managerSid], env('JWT_SECRET', 'test-jwt-secret'));
     }
 
     protected function tearDown(): void
     {
-        Staff::whereIn('id', [$this->ownerId, $this->waiterId])->delete();
+        Staff::whereIn('id', [$this->ownerId, $this->waiterId, $this->managerId])->delete();
         Coupon::where('code', 'like', 'AUDIT_%')->orWhere('code', 'AUDITTEST10')->delete();
         parent::tearDown();
     }
@@ -153,6 +175,70 @@ class SecurityHardeningAuditTest extends TestCase
             'message' => 'PIN must contain only digits.',
             'statusCode' => 400,
         ]);
+    }
+
+
+    public function test_manager_cannot_access_staff_administration(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->getJson('/api/staff');
+
+        $response->assertStatus(403);
+    }
+
+    public function test_manager_cannot_create_owner_staff_account(): void
+    {
+        $phone = '99999' . random_int(10000, 99999);
+
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->postJson('/api/staff', [
+                'name' => 'Unauthorized Owner',
+                'phone' => $phone,
+                'role' => 'OWNER',
+                'pin' => '1234',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertNull(Staff::where('phone', $phone)->first());
+    }
+
+    public function test_manager_cannot_promote_staff_to_owner(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->putJson("/api/staff/{$this->waiterId}", [
+                'role' => 'OWNER',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertEquals('WAITER', Staff::find($this->waiterId)->role);
+    }
+
+    public function test_manager_cannot_deactivate_owner(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->deleteJson("/api/staff/{$this->ownerId}");
+
+        $response->assertStatus(403);
+        $this->assertEquals('ACTIVE', Staff::find($this->ownerId)->status);
+    }
+
+    public function test_manager_cannot_change_owner_pin(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->putJson("/api/staff/{$this->ownerId}/pin", [
+                'newPin' => '5678',
+            ]);
+
+        $response->assertStatus(403);
+        $this->assertTrue(Hash::check('1234', Staff::find($this->ownerId)->pinHash));
+    }
+
+    public function test_manager_cannot_revoke_all_staff_sessions(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->postJson('/api/staff/sessions/revoke-all');
+
+        $response->assertStatus(403);
     }
 
     public function test_coupon_and_banner_status_toggle(): void
