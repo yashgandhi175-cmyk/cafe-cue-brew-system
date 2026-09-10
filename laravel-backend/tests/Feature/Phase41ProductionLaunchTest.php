@@ -175,7 +175,7 @@ class Phase41ProductionLaunchTest extends TestCase
 
         $table = RestaurantTable::create([
             'id' => (string)Str::uuid(),
-            'tableNumber' => 'T-41-' . rand(100, 999),
+            'tableNumber' => 'T-41-' . now()->format('YmdHisv') . '-' . random_int(1000, 9999),
             'capacity' => 4,
             'status' => 'AVAILABLE',
             'isActive' => true,

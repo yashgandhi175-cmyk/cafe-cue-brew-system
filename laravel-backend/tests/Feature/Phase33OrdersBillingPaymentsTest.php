@@ -275,6 +275,85 @@ class Phase33OrdersBillingPaymentsTest extends TestCase
     // BILLING & DISCOUNTS & COUPONS
     // ==========================================
 
+    public function test_role_boundaries_protect_order_and_billing_operations()
+    {
+        $posRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'items' => [
+                ['menuItemId' => $this->menuItem->id, 'quantity' => 1]
+            ],
+        ]);
+
+        $posRes->assertStatus(201);
+        $orderId = $posRes->json('id');
+
+        // WAITER must not be able to cancel orders.
+        $cancelRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->waiterToken
+        )->postJson("/api/orders/{$orderId}/cancel", [
+            'reason' => 'CUSTOMER_REQUEST',
+        ]);
+
+        $cancelRes->assertStatus(403);
+
+        // WAITER must not be able to apply manual discounts.
+        $discountRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->waiterToken
+        )->postJson("/api/billing/orders/{$orderId}/discount", [
+            'type' => 'PERCENTAGE',
+            'value' => 5,
+            'reason' => 'Unauthorized waiter discount attempt',
+        ]);
+
+        $discountRes->assertStatus(403);
+
+        // WAITER must not be able to finalize bills.
+        $finalizeRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->waiterToken
+        )->postJson("/api/billing/orders/{$orderId}/finalize");
+
+        $finalizeRes->assertStatus(403);
+
+        // CASHIER must not be able to invoke owner status override.
+        $overrideRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->cashierToken
+        )->putJson("/api/orders/{$orderId}/status", [
+            'status' => 'COMPLETED',
+            'override' => true,
+            'overrideReason' => 'Unauthorized cashier override attempt',
+        ]);
+
+        $overrideRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Only the OWNER can override status rules.',
+                'statusCode' => 400,
+            ]);
+
+        // OWNER is allowed to invoke an override when a reason is supplied.
+        $ownerOverrideRes = $this->withHeader(
+            'Authorization',
+            'Bearer ' . $this->ownerToken
+        )->putJson("/api/orders/{$orderId}/status", [
+            'status' => 'COMPLETED',
+            'override' => true,
+            'overrideReason' => 'Authorized owner security test override',
+        ]);
+
+        $ownerOverrideRes->assertStatus(200)
+            ->assertJsonPath('status', 'COMPLETED');
+
+        Order::find($orderId)->items()->delete();
+        \App\Models\OrderStockConsumption::where('orderId', $orderId)->delete();
+        Bill::where('orderId', $orderId)->delete();
+        Order::find($orderId)->delete();
+    }
     public function test_bill_retrieval_finalization_and_discount()
     {
         $posRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/orders/pos', [
