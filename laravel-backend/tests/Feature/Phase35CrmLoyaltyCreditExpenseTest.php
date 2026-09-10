@@ -239,8 +239,8 @@ class Phase35CrmLoyaltyCreditExpenseTest extends TestCase
             ->assertJsonStructure(['outstandingLoyaltyPoints', 'topLoyaltyCustomers']);
 
         // 20. Create Redemption Request
-        $order = Order::create(['id' => (string)Str::uuid(), 'orderNumber' => 'ORD-P35-1', 'publicTrackingToken' => (string)Str::uuid(), 'status' => 'RECEIVED', 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500]);
-        $bill = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999001', 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
+        $order = Order::create(['id' => (string)Str::uuid(), 'orderNumber' => 'ORD-P35-1-' . Str::uuid(), 'publicTrackingToken' => (string)Str::uuid(), 'customerId' => $customer->id, 'status' => 'RECEIVED', 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500]);
+        $bill = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999001-' . Str::uuid(), 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
 
         $redReqRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/loyalty/redemption-requests', [
             'billId' => $bill->id,
@@ -251,6 +251,56 @@ class Phase35CrmLoyaltyCreditExpenseTest extends TestCase
         $requestId = $redReqRes->json('id');
         $this->assertEquals('PENDING', $redReqRes->json('status'));
 
+        // Security: a redemption request must not combine one customer's loyalty points with another customer's bill.
+        $otherCustomer = Customer::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Other Customer',
+            'phone' => '999999' . random_int(1000, 9999),
+            'status' => 'ACTIVE',
+            'loyaltyPoints' => 100,
+        ]);
+
+        $otherOrder = Order::create([
+            'id' => (string)Str::uuid(),
+            'orderNumber' => 'ORD-35-IDOR-' . random_int(10000, 99999),
+            'publicTrackingToken' => (string)Str::uuid(),
+            'customerId' => $otherCustomer->id,
+            'source' => 'OWNER_POS',
+            'status' => 'RECEIVED',
+            'paymentStatus' => 'UNPAID',
+            'subtotal' => 500,
+            'taxableAmount' => 500,
+            'grandTotal' => 500,
+        ]);
+
+        $otherBill = Bill::create([
+            'id' => (string)Str::uuid(),
+            'orderId' => $otherOrder->id,
+            'invoiceNumber' => 'CCB-2026-IDOR-' . random_int(10000, 99999),
+            'subtotal' => 500,
+            'taxableAmount' => 500,
+            'grandTotal' => 500,
+            'status' => 'DRAFT',
+            'paymentStatus' => 'UNPAID',
+        ]);
+
+        $mismatchRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)
+            ->postJson('/api/loyalty/redemption-requests', [
+                'billId' => $otherBill->id,
+                'customerId' => $customer->id,
+                'requestedPoints' => 20,
+            ]);
+
+        $mismatchRes->assertStatus(403)
+            ->assertJson([
+                'message' => 'The selected bill does not belong to the selected customer.',
+            ]);
+
+        $this->assertDatabaseMissing('LoyaltyRedemptionRequest', [
+            'billId' => $otherBill->id,
+            'customerId' => $customer->id,
+        ]);
+
         // 21, 24-25. Approve Redemption Request & Prevent Double Approval
         $appRes = $this->withHeader('Authorization', 'Bearer ' . $this->managerToken)->postJson("/api/loyalty/redemption-requests/{$requestId}/approve");
         $appRes->assertStatus(200)
@@ -260,7 +310,7 @@ class Phase35CrmLoyaltyCreditExpenseTest extends TestCase
         $doubleAppRes->assertStatus(400);
 
         // 22. Reject Redemption Request test
-        $bill2 = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999002', 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
+        $bill2 = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999002-' . Str::uuid(), 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
         $redReqRes2 = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/loyalty/redemption-requests', [
             'billId' => $bill2->id,
             'customerId' => $customer->id,
@@ -273,7 +323,7 @@ class Phase35CrmLoyaltyCreditExpenseTest extends TestCase
             ->assertJson(['status' => 'REJECTED']);
 
         // 23. Cancel Redemption Request test
-        $bill3 = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999003', 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
+        $bill3 = Bill::create(['id' => (string)Str::uuid(), 'orderId' => $order->id, 'invoiceNumber' => 'CCB-2026-999003-' . Str::uuid(), 'subtotal' => 500, 'taxableAmount' => 500, 'grandTotal' => 500, 'status' => 'DRAFT', 'paymentStatus' => 'UNPAID']);
         $redReqRes3 = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/loyalty/redemption-requests', [
             'billId' => $bill3->id,
             'customerId' => $customer->id,

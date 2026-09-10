@@ -119,10 +119,14 @@ class LoyaltyService
                 throw new \Exception('Loyalty redemption is only allowed for active customers.', 400);
             }
 
-            $bill = Bill::find($dto['billId']);
+            $bill = Bill::with('order')->find($dto['billId']);
             if (!$bill) throw new \Exception('Bill not found.', 404);
             if ($bill->status !== 'DRAFT') {
                 throw new \Exception('Loyalty redemption requests can only be made for draft bills.', 400);
+            }
+
+            if (!$bill->order || $bill->order->customerId !== $customer->id) {
+                throw new \Exception('The selected bill does not belong to the selected customer.', 403);
             }
 
             $reqPoints = (int)$dto['requestedPoints'];
