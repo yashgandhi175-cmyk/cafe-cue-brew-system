@@ -30,6 +30,10 @@ class AuthService
         $pinLength = $settings ? $settings->pinLength : 4;
 
         $pin = $data['pin'] ?? '';
+
+        if (!ctype_digit($pin)) {
+            throw new \Exception('PIN must contain only digits.', 400);
+        }
         if (strlen($pin) !== $pinLength) {
             throw new \Exception("PIN must be exactly {$pinLength} digits according to policy.", 400);
         }
@@ -171,6 +175,10 @@ class AuthService
     {
         $settings = RestaurantSettings::find('default');
         $pinLength = $settings ? $settings->pinLength : 4;
+
+        if (!ctype_digit($newPin)) {
+            throw new \Exception('PIN must contain only digits.', 400);
+        }
 
         if (strlen($newPin) !== $pinLength) {
             throw new \Exception("PIN must be exactly {$pinLength} digits according to policy.", 400);

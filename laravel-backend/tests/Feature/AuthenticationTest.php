@@ -90,6 +90,32 @@ class AuthenticationTest extends TestCase
         $staff->delete();
     }
 
+    public function test_login_rejects_non_numeric_pin(): void
+    {
+        $staffId = (string)Str::uuid();
+
+        Staff::create([
+            'id' => $staffId,
+            'name' => 'Non Numeric PIN Staff',
+            'phone' => $this->randomPhone(),
+            'role' => 'CASHIER',
+            'pinHash' => Hash::make('12ab'),
+            'status' => 'ACTIVE',
+        ]);
+
+        $response = $this->postJson('/api/auth/login', [
+            'staffId' => $staffId,
+            'pin' => '12ab',
+        ]);
+
+        $response->assertStatus(400);
+        $response->assertJsonFragment([
+            'message' => 'PIN must contain only digits.',
+        ]);
+
+        Staff::find($staffId)?->delete();
+    }
+
     public function test_failed_attempt_increment()
     {
         $staffId = (string)Str::uuid();

@@ -7,6 +7,7 @@ use App\Models\Staff;
 use App\Models\StaffSession;
 use App\Models\StaffLoginHistory;
 use App\Models\Attendance;
+use App\Models\RestaurantSettings;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -32,7 +33,22 @@ class StaffController extends Controller
             'role' => 'required|string',
             'pin' => 'required|string',
         ]);
+        $settings = RestaurantSettings::find('default');
+        $pinLength = $settings ? $settings->pinLength : 4;
 
+        if (!ctype_digit($data['pin'])) {
+            return response()->json([
+                'message' => 'PIN must contain only digits.',
+                'statusCode' => 400,
+            ], 400);
+        }
+
+        if (strlen($data['pin']) !== $pinLength) {
+            return response()->json([
+                'message' => "PIN must be exactly {$pinLength} digits according to policy.",
+                'statusCode' => 400,
+            ], 400);
+        }
         $staff = Staff::create([
             'id' => (string)Str::uuid(),
             'name' => $data['name'],
@@ -65,18 +81,40 @@ class StaffController extends Controller
     public function changePin(Request $request, $id)
     {
         $data = $request->validate([
-            'newPin' => 'nullable|string|min:4|max:6',
-            'pin' => 'nullable|string|min:4|max:6',
+            'newPin' => 'nullable|string',
+            'pin' => 'nullable|string',
         ]);
+
         $newPin = $data['newPin'] ?? $data['pin'] ?? null;
+
         if (!$newPin) {
             return response()->json(['message' => 'New PIN is required', 'statusCode' => 400], 400);
         }
+
+        $settings = RestaurantSettings::find('default');
+        $pinLength = $settings ? $settings->pinLength : 4;
+
+        if (!ctype_digit($newPin)) {
+            return response()->json([
+                'message' => 'PIN must contain only digits.',
+                'statusCode' => 400,
+            ], 400);
+        }
+
+        if (strlen($newPin) !== $pinLength) {
+            return response()->json([
+                'message' => "PIN must be exactly {$pinLength} digits according to policy.",
+                'statusCode' => 400,
+            ], 400);
+        }
+
         $staff = Staff::find($id);
         if (!$staff) return response()->json(['message' => 'Staff not found', 'statusCode' => 404], 404);
+
         $staff->pinHash = Hash::make($newPin);
         $staff->mustChangePin = false;
         $staff->save();
+
         return response()->json(['message' => 'Staff PIN updated successfully']);
     }
 

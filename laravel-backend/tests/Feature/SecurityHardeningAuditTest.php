@@ -108,6 +108,53 @@ class SecurityHardeningAuditTest extends TestCase
         $this->assertEquals('WAITER', $updatedStaff->role);
     }
 
+    public function test_owner_cannot_set_non_numeric_staff_pin(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->ownerToken}"])
+            ->putJson("/api/staff/{$this->waiterId}/pin", [
+                'newPin' => '12ab'
+            ]);
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'message' => 'PIN must contain only digits.',
+            'statusCode' => 400,
+        ]);
+    }
+
+    public function test_owner_cannot_set_staff_pin_with_wrong_configured_length(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->ownerToken}"])
+            ->putJson("/api/staff/{$this->waiterId}/pin", [
+                'newPin' => '12345'
+            ]);
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'message' => 'PIN must be exactly 4 digits according to policy.',
+            'statusCode' => 400,
+        ]);
+    }
+
+    public function test_owner_cannot_create_staff_with_non_numeric_pin(): void
+    {
+        $phone = '99999' . random_int(10000, 99999);
+
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->ownerToken}"])
+            ->postJson('/api/staff', [
+                'name' => 'Invalid PIN Staff',
+                'phone' => $phone,
+                'role' => 'WAITER',
+                'pin' => '12ab',
+            ]);
+
+        $response->assertStatus(400);
+        $response->assertJson([
+            'message' => 'PIN must contain only digits.',
+            'statusCode' => 400,
+        ]);
+    }
+
     public function test_coupon_and_banner_status_toggle(): void
     {
         Coupon::where('code', 'like', 'AUDIT_%')->orWhere('code', 'AUDITTEST10')->delete();
