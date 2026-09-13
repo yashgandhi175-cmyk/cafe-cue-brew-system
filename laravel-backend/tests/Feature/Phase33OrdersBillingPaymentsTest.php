@@ -13,6 +13,7 @@ use App\Models\MenuItemAddon;
 use App\Models\RestaurantTable;
 use App\Models\TableQrToken;
 use App\Models\Order;
+use App\Models\OrderStatusHistory;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Coupon;
@@ -73,7 +74,7 @@ class Phase33OrdersBillingPaymentsTest extends TestCase
         $this->cashierToken = $this->createStaffToken($this->cashier);
         $this->waiterToken = $this->createStaffToken($this->waiter);
 
-        $this->category = Category::create(['id' => (string)Str::uuid(), 'name' => 'POS Test Cat ' . rand(1000, 9999), 'displayOrder' => 1, 'isActive' => true]);
+        $this->category = Category::create(['id' => (string)Str::uuid(), 'name' => 'POS Test Cat ' . Str::uuid(), 'displayOrder' => 1, 'isActive' => true]);
         $this->menuItem = MenuItem::create([
             'id' => (string)Str::uuid(),
             'name' => 'POS Item Cold Coffee ' . rand(1000, 9999),
@@ -244,6 +245,37 @@ class Phase33OrdersBillingPaymentsTest extends TestCase
 
         Order::find($orderId)->items()->delete();
         Bill::where('orderId', $orderId)->delete();
+        Order::find($orderId)->delete();
+    }
+
+    public function test_order_status_rejects_arbitrary_values(): void
+    {
+        $posRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'items' => [['menuItemId' => $this->menuItem->id, 'quantity' => 1]],
+        ]);
+
+        $posRes->assertStatus(201);
+
+        $orderId = $posRes->json('id');
+        $originalStatus = Order::find($orderId)->status;
+
+        $badRes = $this->withHeader('Authorization', 'Bearer ' . $this->managerToken)
+            ->putJson("/api/orders/{$orderId}/status", [
+                'status' => 'HACKED',
+            ]);
+
+        $badRes->assertStatus(400);
+
+        $this->assertSame($originalStatus, Order::find($orderId)->status);
+        $this->assertDatabaseMissing('OrderStatusHistory', [
+            'orderId' => $orderId,
+            'newStatus' => 'HACKED',
+        ]);
+
+        Order::find($orderId)->items()->delete();
+        Bill::where('orderId', $orderId)->delete();
+        OrderStatusHistory::where('orderId', $orderId)->delete();
         Order::find($orderId)->delete();
     }
 
@@ -1272,6 +1304,61 @@ public function test_coupon_finalization_rolls_back_when_coupon_usage_fails()
             ->assertJson(['status' => 'COMPLETED']);
 
         $this->assertDatabaseHas('Order', ['id' => $orderId, 'status' => 'COMPLETED', 'paymentStatus' => 'PAID']);
+
+        Payment::where('billId', $billId)->delete();
+        Bill::where('id', $billId)->delete();
+        \App\Models\OrderStockConsumption::where('orderId', $orderId)->delete();
+        Order::find($orderId)->items()->delete();
+        Order::find($orderId)->delete();
+    }
+
+    public function test_payment_idempotency_prevents_duplicate_payment_records(): void
+    {
+        $posRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)->postJson('/api/orders/pos', [
+            'orderType' => 'TAKEAWAY',
+            'items' => [['menuItemId' => $this->menuItem->id, 'quantity' => 1]],
+        ]);
+
+        $posRes->assertStatus(201);
+
+        $orderId = $posRes->json('id');
+
+        $finRes = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)
+            ->postJson("/api/billing/orders/{$orderId}/finalize");
+
+        $finRes->assertStatus(200);
+
+        $billId = $finRes->json('id');
+        $grandTotal = (float)$finRes->json('grandTotal');
+        $idempotencyKey = (string)Str::uuid();
+
+        $payload = [
+            'billId' => $billId,
+            'method' => 'UPI',
+            'amount' => $grandTotal,
+            'reference' => 'IDEMPOTENCY-TEST',
+            'paymentIdempotencyKey' => $idempotencyKey,
+        ];
+
+        $first = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)
+            ->postJson('/api/payments', $payload);
+
+        $first->assertStatus(201);
+
+        $paymentId = $first->json('id');
+
+        $second = $this->withHeader('Authorization', 'Bearer ' . $this->cashierToken)
+            ->postJson('/api/payments', $payload);
+
+        $second->assertStatus(201)
+            ->assertJson(['id' => $paymentId]);
+
+        $this->assertSame(
+            1,
+            Payment::where('billId', $billId)
+                ->where('paymentIdempotencyKey', $idempotencyKey)
+                ->count()
+        );
 
         Payment::where('billId', $billId)->delete();
         Bill::where('id', $billId)->delete();

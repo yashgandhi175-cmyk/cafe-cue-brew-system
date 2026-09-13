@@ -43,7 +43,11 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($staffId, $staffRole, $dto, $amount, $idempotencyKey) {
-            $bill = Bill::with('order')->find($dto['billId'] ?? '');
+            $bill = Bill::with('order')
+                ->where('id', $dto['billId'] ?? '')
+                ->lockForUpdate()
+                ->first();
+
             if (!$bill) {
                 throw new \Exception('Bill not found.', 404);
             }
