@@ -49,19 +49,40 @@ class PublicOrderController extends Controller
         }
     }
 
-    public function activeToken(string $tableId)
+    public function activeToken(Request $request, string $tableId)
     {
-        return response()->json($this->publicOrderService->getActiveTrackingTokenForTable($tableId));
+        $token = $request->query('token');
+        if (!$token) {
+            return response()->json(['message' => 'Table QR token is required.', 'statusCode' => 422], 422);
+        }
+
+        try {
+            return response()->json($this->publicOrderService->getActiveTrackingTokenForTable($tableId, $token));
+        } catch (\Exception $e) {
+            $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
+            return response()->json(['message' => $e->getMessage(), 'statusCode' => $code], $code);
+        }
     }
 
-    public function getCart(string $tableId)
+    public function getCart(Request $request, string $tableId)
     {
-        return response()->json($this->publicOrderService->getCart($tableId));
+        $token = $request->query('token');
+        if (!$token) {
+            return response()->json(['message' => 'Table QR token is required.', 'statusCode' => 422], 422);
+        }
+
+        try {
+            return response()->json($this->publicOrderService->getCart($tableId, $token));
+        } catch (\Exception $e) {
+            $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
+            return response()->json(['message' => $e->getMessage(), 'statusCode' => $code], $code);
+        }
     }
 
     public function updateCart(Request $request, string $tableId)
     {
         $data = $request->validate([
+            'token' => 'required|string',
             'menuItemId' => 'required|string|exists:MenuItem,id',
             'variantId' => 'nullable|string',
             'addonIds' => 'nullable|array',
@@ -69,19 +90,26 @@ class PublicOrderController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        return response()->json($this->publicOrderService->updateCartItem(
-            $tableId,
-            $data['menuItemId'],
-            $data['variantId'] ?? null,
-            $data['addonIds'] ?? [],
-            (int)$data['quantity'],
-            $data['notes'] ?? null
-        ));
+        try {
+            return response()->json($this->publicOrderService->updateCartItem(
+                $tableId,
+                $data['token'],
+                $data['menuItemId'],
+                $data['variantId'] ?? null,
+                $data['addonIds'] ?? [],
+                (int)$data['quantity'],
+                $data['notes'] ?? null
+            ));
+        } catch (\Exception $e) {
+            $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
+            return response()->json(['message' => $e->getMessage(), 'statusCode' => $code], $code);
+        }
     }
 
     public function syncCart(Request $request, string $tableId)
     {
         $data = $request->validate([
+            'token' => 'required|string',
             'items' => 'required|array',
             'items.*.menuItemId' => 'required|string|exists:MenuItem,id',
             'items.*.variantId' => 'nullable|string',
@@ -89,11 +117,25 @@ class PublicOrderController extends Controller
             'items.*.notes' => 'nullable|string',
         ]);
 
-        return response()->json($this->publicOrderService->syncCart($tableId, $data['items']));
+        try {
+            return response()->json($this->publicOrderService->syncCart($tableId, $data['token'], $data['items']));
+        } catch (\Exception $e) {
+            $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
+            return response()->json(['message' => $e->getMessage(), 'statusCode' => $code], $code);
+        }
     }
 
-    public function clearCart(string $tableId)
+    public function clearCart(Request $request, string $tableId)
     {
-        return response()->json($this->publicOrderService->clearCart($tableId));
+        $data = $request->validate([
+            'token' => 'required|string',
+        ]);
+
+        try {
+            return response()->json($this->publicOrderService->clearCart($tableId, $data['token']));
+        } catch (\Exception $e) {
+            $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;
+            return response()->json(['message' => $e->getMessage(), 'statusCode' => $code], $code);
+        }
     }
 }

@@ -4,15 +4,24 @@ namespace App\Services;
 
 use App\Models\WaiterCall;
 use App\Models\RestaurantTable;
+use App\Models\TableQrToken;
 use Illuminate\Support\Str;
 
 class WaiterCallService
 {
-    public function createCall(string $tableId): WaiterCall
+    public function createCall(string $tableId, string $token): WaiterCall
     {
         $table = RestaurantTable::find($tableId);
         if (!$table || !$table->isActive) {
             throw new \Exception('The selected table is invalid or inactive.', 400);
+        }
+
+        $qrToken = TableQrToken::where('tableId', $tableId)
+            ->where('token', $token)
+            ->first();
+
+        if (!$qrToken) {
+            throw new \Exception('Invalid or expired table QR token.', 400);
         }
 
         return WaiterCall::create([

@@ -12,6 +12,7 @@ use App\Models\RestaurantSettings;
 use App\Models\Customer;
 use App\Models\CustomerCart;
 use App\Models\CustomerCartItem;
+use App\Models\TableQrToken;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -255,8 +256,8 @@ if (!empty($dto['couponCode'])) {
             $table->status = 'OCCUPIED';
             $table->save();
 
-            // Clear table cart
-            $this->clearCart($table->id);
+            // Clear table cart after successful order creation.
+            $this->clearCart($table->id, $dto['token']);
 
             return $this->sanitizeOrderResponse($order);
         });
@@ -276,8 +277,10 @@ if (!empty($dto['couponCode'])) {
         return $this->sanitizeOrderResponse($order);
     }
 
-    public function getActiveTrackingTokenForTable(string $tableId): array
+    public function getActiveTrackingTokenForTable(string $tableId, string $token): array
     {
+        $this->validateTableQrAccess($tableId, $token);
+
         $order = Order::where('tableId', $tableId)
             ->whereIn('status', ['RECEIVED', 'ACCEPTED', 'PREPARING', 'READY'])
             ->orderBy('createdAt', 'desc')
@@ -290,9 +293,32 @@ if (!empty($dto['couponCode'])) {
         ];
     }
 
-    // Cart management
-    public function getCart(string $tableId): array
+    private function validateTableQrAccess(string $tableId, string $token): RestaurantTable
     {
+        $table = RestaurantTable::where('id', $tableId)
+            ->where('isActive', true)
+            ->first();
+
+        if (!$table) {
+            throw new \Exception('The selected table is invalid or inactive.', 400);
+        }
+
+        $validToken = TableQrToken::where('tableId', $tableId)
+            ->where('token', $token)
+            ->exists();
+
+        if (!$validToken) {
+            throw new \Exception('Invalid or expired table QR token.', 400);
+        }
+
+        return $table;
+    }
+
+    // Cart management
+    public function getCart(string $tableId, string $token): array
+    {
+        $this->validateTableQrAccess($tableId, $token);
+
         $cart = CustomerCart::where('tableId', $tableId)->with('items')->first();
         return [
             'tableId' => $tableId,
@@ -300,8 +326,10 @@ if (!empty($dto['couponCode'])) {
         ];
     }
 
-    public function updateCartItem(string $tableId, string $menuItemId, ?string $variantId, array $addonIds, int $quantity, ?string $notes = null): array
+    public function updateCartItem(string $tableId, string $token, string $menuItemId, ?string $variantId, array $addonIds, int $quantity, ?string $notes = null): array
     {
+        $this->validateTableQrAccess($tableId, $token);
+
         $cart = CustomerCart::firstOrCreate(
             ['tableId' => $tableId],
             ['id' => (string)Str::uuid()]
@@ -319,11 +347,13 @@ if (!empty($dto['couponCode'])) {
             );
         }
 
-        return $this->getCart($tableId);
+        return $this->getCart($tableId, $token);
     }
 
-    public function syncCart(string $tableId, array $items): array
+    public function syncCart(string $tableId, string $token, array $items): array
     {
+        $this->validateTableQrAccess($tableId, $token);
+
         $cart = CustomerCart::firstOrCreate(
             ['tableId' => $tableId],
             ['id' => (string)Str::uuid()]
@@ -344,11 +374,13 @@ if (!empty($dto['couponCode'])) {
             }
         }
 
-        return $this->getCart($tableId);
+        return $this->getCart($tableId, $token);
     }
 
-    public function clearCart(string $tableId): array
+    public function clearCart(string $tableId, string $token): array
     {
+        $this->validateTableQrAccess($tableId, $token);
+
         $cart = CustomerCart::where('tableId', $tableId)->first();
         if ($cart) {
             CustomerCartItem::where('cartId', $cart->id)->delete();

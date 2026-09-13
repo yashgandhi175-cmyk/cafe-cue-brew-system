@@ -14,10 +14,14 @@ class WaiterCallController extends Controller
         $this->waiterCallService = $waiterCallService;
     }
 
-    public function store(string $tableId)
+    public function store(Request $request, string $tableId)
     {
+        $data = $request->validate([
+            'token' => 'required|string',
+        ]);
+
         try {
-            $call = $this->waiterCallService->createCall($tableId);
+            $call = $this->waiterCallService->createCall($tableId, $data['token']);
             return response()->json($call, 201);
         } catch (\Exception $e) {
             $code = (is_int($e->getCode()) && $e->getCode() >= 400 && $e->getCode() < 600) ? (int)$e->getCode() : 400;

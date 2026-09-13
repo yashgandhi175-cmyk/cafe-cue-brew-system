@@ -260,7 +260,9 @@ function MenuPageContent() {
 
         // Load Persistent Cart scoped to Table ID from Backend (fallback to LocalStorage)
         try {
-          const cartRes = await axios.get(`${API_URL}/public/orders/cart/${tableId}`);
+          const cartRes = await axios.get(`${API_URL}/public/orders/cart/${tableId}`, {
+            params: { token },
+          });
           if (cartRes.data && cartRes.data.items && cartRes.data.items.length > 0) {
             const backendCart: { [key: string]: CartItem } = {};
             cartRes.data.items.forEach((item: any) => {
@@ -304,7 +306,9 @@ function MenuPageContent() {
 
         // Load active tracking token for table if any
         try {
-          const tokenRes = await axios.get(`${API_URL}/public/orders/active-token/${tableId}`);
+          const tokenRes = await axios.get(`${API_URL}/public/orders/active-token/${tableId}`, {
+            params: { token },
+          });
           if (tokenRes.data && tokenRes.data.trackingToken) {
             setActiveTrackingToken(tokenRes.data.trackingToken);
             localStorage.setItem(`ccb_active_tracking_token_${tableId}`, tokenRes.data.trackingToken);
@@ -384,6 +388,7 @@ function MenuPageContent() {
         notes: ci.notes || undefined,
       }));
       await axios.put(`${API_URL}/public/orders/cart/${tableId}`, {
+        token,
         items: itemsPayload,
       });
     } catch {
@@ -463,8 +468,7 @@ function MenuPageContent() {
     setWaiterCallMessage(null);
 
     try {
-      const res = await axios.post(`${API_URL}/public/tables/call-waiter`, {
-        tableId,
+      const res = await axios.post(`${API_URL}/public/tables/${tableId}/call-waiter`, {
         token,
       });
 

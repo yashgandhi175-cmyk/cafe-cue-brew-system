@@ -192,7 +192,10 @@ class Phase41ProductionLaunchTest extends TestCase
         $qrRes = $this->getJson("/api/public/tables/{$qrToken->token}");
         $qrRes->assertStatus(200)->assertJson(['id' => $table->id]);
 
-        $waiterRes = $this->postJson("/api/public/tables/{$table->id}/call-waiter", ['type' => 'ASSISTANCE']);
+        $waiterRes = $this->postJson("/api/public/tables/{$table->id}/call-waiter", [
+            'type' => 'ASSISTANCE',
+            'token' => $qrToken->token,
+        ]);
         $waiterRes->assertStatus(201);
 
         // C. Customer Creation & Consent

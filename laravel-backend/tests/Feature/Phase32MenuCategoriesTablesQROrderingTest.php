@@ -11,6 +11,8 @@ use App\Models\MenuVariant;
 use App\Models\Addon;
 use App\Models\MenuItemAddon;
 use App\Models\RestaurantTable;
+use App\Models\CustomerCart;
+use App\Models\CustomerCartItem;
 use App\Models\TableQrToken;
 use App\Models\WaiterCall;
 use App\Models\Order;
@@ -235,8 +237,19 @@ class Phase32MenuCategoriesTablesQROrderingTest extends TestCase
             'isActive' => true,
         ]);
 
+        $token = 'CCB_TBL_WAITER_' . Str::random(12);
+
+        TableQrToken::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $table->id,
+            'token' => $token,
+            'createdAt' => now(),
+        ]);
+
         // Public Customer Call Waiter
-        $callRes = $this->postJson('/api/public/tables/' . $table->id . '/call-waiter');
+        $callRes = $this->postJson('/api/public/tables/' . $table->id . '/call-waiter', [
+            'token' => $token,
+        ]);
         $callRes->assertStatus(201);
         $callId = $callRes->json('id');
 
@@ -250,12 +263,252 @@ class Phase32MenuCategoriesTablesQROrderingTest extends TestCase
 
         // Clean up
         WaiterCall::where('id', $callId)->delete();
+        TableQrToken::where('tableId', $table->id)->delete();
         $table->delete();
     }
 
     // ==========================================
     // G. PUBLIC QR ORDERING & SERVER PRICING TAMPER TEST
     // ==========================================
+
+    public function test_public_cart_and_active_token_require_matching_table_qr_token(): void
+    {
+        $tableA = RestaurantTable::create([
+            'id' => (string)Str::uuid(),
+            'tableNumber' => 'CART-A-' . Str::random(8),
+            'capacity' => 2,
+            'status' => 'OCCUPIED',
+            'isActive' => true,
+        ]);
+
+        $tableB = RestaurantTable::create([
+            'id' => (string)Str::uuid(),
+            'tableNumber' => 'CART-B-' . Str::random(8),
+            'capacity' => 2,
+            'status' => 'OCCUPIED',
+            'isActive' => true,
+        ]);
+
+        $tokenA = 'CCB_TBL_A_' . Str::random(16);
+        $tokenB = 'CCB_TBL_B_' . Str::random(16);
+
+        TableQrToken::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableA->id,
+            'token' => $tokenA,
+            'createdAt' => now(),
+        ]);
+
+        TableQrToken::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableB->id,
+            'token' => $tokenB,
+            'createdAt' => now(),
+        ]);
+
+        $category = Category::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'QR Cart Security Category ' . Str::random(8),
+            'displayOrder' => 1,
+            'isActive' => true,
+        ]);
+
+        $menuItem = MenuItem::create([
+            'id' => (string)Str::uuid(),
+            'categoryId' => $category->id,
+            'name' => 'QR Cart Security Item ' . Str::random(8),
+            'basePrice' => 100.00,
+            'available' => true,
+        ]);
+
+        $cartB = CustomerCart::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableB->id,
+        ]);
+
+        // Table A token must not read Table B's cart.
+        $getRes = $this->getJson(
+            '/api/public/orders/cart/' . $tableB->id . '?token=' . urlencode($tokenA)
+        );
+
+        $getRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Invalid or expired table QR token.',
+                'statusCode' => 400,
+            ]);
+
+        // Table A token must not modify Table B's cart.
+        $updateRes = $this->postJson('/api/public/orders/cart/' . $tableB->id, [
+            'token' => $tokenA,
+            'menuItemId' => $menuItem->id,
+            'quantity' => 9,
+            'notes' => 'unauthorized cart change',
+        ]);
+
+        $updateRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Invalid or expired table QR token.',
+                'statusCode' => 400,
+            ]);
+
+        $this->assertDatabaseMissing('CustomerCartItem', [
+            'cartId' => $cartB->id,
+        ]);
+
+        // Table A token must not obtain Table B's active tracking token.
+        $activeTokenRes = $this->getJson(
+            '/api/public/orders/active-token/' . $tableB->id . '?token=' . urlencode($tokenA)
+        );
+
+        $activeTokenRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Invalid or expired table QR token.',
+                'statusCode' => 400,
+            ]);
+
+        // Valid Table B token must still be accepted.
+        $validCartRes = $this->getJson(
+            '/api/public/orders/cart/' . $tableB->id . '?token=' . urlencode($tokenB)
+        );
+
+        $validCartRes->assertStatus(200);
+
+        // Cleanup.
+        CustomerCartItem::where('cartId', $cartB->id)->delete();
+        $cartB->delete();
+        TableQrToken::whereIn('tableId', [$tableA->id, $tableB->id])->delete();
+        $tableA->delete();
+        $tableB->delete();
+        $menuItem->delete();
+        $category->delete();
+    }
+
+    public function test_public_sync_and_clear_cart_require_matching_table_qr_token(): void
+    {
+        $tableA = RestaurantTable::create([
+            'id' => (string)Str::uuid(),
+            'tableNumber' => 'SYNC-A-' . Str::random(8),
+            'capacity' => 2,
+            'status' => 'OCCUPIED',
+            'isActive' => true,
+        ]);
+
+        $tableB = RestaurantTable::create([
+            'id' => (string)Str::uuid(),
+            'tableNumber' => 'SYNC-B-' . Str::random(8),
+            'capacity' => 2,
+            'status' => 'OCCUPIED',
+            'isActive' => true,
+        ]);
+
+        $tokenA = 'CCB_TBL_SYNC_A_' . Str::random(16);
+        $tokenB = 'CCB_TBL_SYNC_B_' . Str::random(16);
+
+        TableQrToken::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableA->id,
+            'token' => $tokenA,
+            'createdAt' => now(),
+        ]);
+
+        TableQrToken::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableB->id,
+            'token' => $tokenB,
+            'createdAt' => now(),
+        ]);
+
+        $category = Category::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'QR Sync Security Category ' . Str::random(8),
+            'displayOrder' => 1,
+            'isActive' => true,
+        ]);
+
+        $menuItem = MenuItem::create([
+            'id' => (string)Str::uuid(),
+            'categoryId' => $category->id,
+            'name' => 'QR Sync Security Item ' . Str::random(8),
+            'basePrice' => 100.00,
+            'available' => true,
+        ]);
+
+        $cartB = CustomerCart::create([
+            'id' => (string)Str::uuid(),
+            'tableId' => $tableB->id,
+        ]);
+
+        $existingItemId = (string)Str::uuid();
+
+        CustomerCartItem::create([
+            'id' => $existingItemId,
+            'cartId' => $cartB->id,
+            'menuItemId' => (string)Str::uuid(),
+            'variantId' => null,
+            'addonIds' => json_encode([]),
+            'quantity' => 2,
+            'notes' => 'original cart item',
+        ]);
+
+        // Wrong QR token must not sync/replace Table B's cart.
+        $syncRes = $this->putJson('/api/public/orders/cart/' . $tableB->id, [
+            'token' => $tokenA,
+            'items' => [
+                [
+                    'menuItemId' => $menuItem->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ]);
+
+        $syncRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Invalid or expired table QR token.',
+                'statusCode' => 400,
+            ]);
+
+        $this->assertDatabaseHas('CustomerCartItem', [
+            'id' => $existingItemId,
+            'cartId' => $cartB->id,
+            'quantity' => 2,
+        ]);
+
+        // Wrong QR token must not clear Table B's cart.
+        $clearRes = $this->deleteJson('/api/public/orders/cart/' . $tableB->id, [
+            'token' => $tokenA,
+        ]);
+
+        $clearRes->assertStatus(400)
+            ->assertJson([
+                'message' => 'Invalid or expired table QR token.',
+                'statusCode' => 400,
+            ]);
+
+        $this->assertDatabaseHas('CustomerCartItem', [
+            'id' => $existingItemId,
+            'cartId' => $cartB->id,
+            'quantity' => 2,
+        ]);
+
+        // Correct QR token must still be able to clear the cart.
+        $validClearRes = $this->deleteJson('/api/public/orders/cart/' . $tableB->id, [
+            'token' => $tokenB,
+        ]);
+
+        $validClearRes->assertStatus(200);
+
+        $this->assertDatabaseMissing('CustomerCartItem', [
+            'id' => $existingItemId,
+        ]);
+
+        // Cleanup.
+        $cartB->delete();
+        TableQrToken::whereIn('tableId', [$tableA->id, $tableB->id])->delete();
+        $tableA->delete();
+        $tableB->delete();
+        $menuItem->delete();
+        $category->delete();
+    }
 
     public function test_public_qr_ordering_rejects_client_price_tampering()
     {

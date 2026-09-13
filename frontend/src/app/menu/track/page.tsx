@@ -158,13 +158,21 @@ function TrackPageContent() {
     setWaiterCallLoading(true);
     setWaiterCallMessage(null);
 
-    const lastToken = localStorage.getItem('ccb_last_token') || '';
     const orderTableId = order.tableId || '';
+    const tableQrToken =
+      (orderTableId ? localStorage.getItem(`ccb_table_qr_token_${orderTableId}`) : null) ||
+      localStorage.getItem('ccb_last_table_qr_token') ||
+      '';
+
+    if (!orderTableId || !tableQrToken) {
+      setWaiterCallMessage('This table QR session is no longer available. Please scan the table QR code again.');
+      setWaiterCallLoading(false);
+      return;
+    }
 
     try {
-      const res = await axios.post(`${API_URL}/public/tables/call-waiter`, {
-        tableId: orderTableId,
-        token: lastToken,
+      const res = await axios.post(`${API_URL}/public/tables/${orderTableId}/call-waiter`, {
+        token: tableQrToken,
       });
 
       setWaiterCallMessage(res.data.message);

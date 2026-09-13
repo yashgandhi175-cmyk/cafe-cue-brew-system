@@ -238,6 +238,7 @@ class Phase38FrontendE2eIntegrationTest extends TestCase
         // Submit Waiter Call
         $callRes = $this->postJson("/api/public/tables/{$table->id}/call-waiter", [
             'type' => 'WATER',
+            'token' => $qrToken->token,
         ]);
         $callRes->assertStatus(201);
 
