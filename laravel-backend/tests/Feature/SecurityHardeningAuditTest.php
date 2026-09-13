@@ -241,6 +241,91 @@ class SecurityHardeningAuditTest extends TestCase
         $response->assertStatus(403);
     }
 
+
+    public function test_manager_cannot_update_restaurant_settings(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->managerToken}"])
+            ->putJson('/api/settings', [
+                'name' => 'Unauthorized Manager Update',
+            ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_waiter_cannot_update_restaurant_settings(): void
+    {
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->waiterToken}"])
+            ->putJson('/api/settings', [
+                'name' => 'Unauthorized Waiter Update',
+            ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_settings_update_cannot_modify_hidden_security_fields(): void
+    {
+        \App\Models\RestaurantSettings::where('id', 'attacker-controlled-id')->delete();
+
+        $settings = \App\Models\RestaurantSettings::find('default');
+
+        if (!$settings) {
+            $settings = \App\Models\RestaurantSettings::create([
+                'id' => 'default',
+                'name' => 'Cafe Cue & Brew',
+            ]);
+        }
+
+        $originalSessionTimeout = $settings->sessionTimeout;
+        $originalMaxFailedAttempts = $settings->maxFailedAttempts;
+        $originalAllowNegativeStock = $settings->allowNegativeStock;
+
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->ownerToken}"])
+            ->putJson('/api/settings', [
+                'name' => 'Allowed Settings Update',
+                'sessionTimeout' => 999999,
+                'maxFailedAttempts' => 999999,
+                'allowNegativeStock' => true,
+                'managerCanManageInventory' => false,
+                'id' => 'attacker-controlled-id',
+            ]);
+
+        $response->assertStatus(200);
+
+        $settings->refresh();
+
+        $this->assertSame('Allowed Settings Update', $settings->name);
+        $this->assertSame($originalSessionTimeout, $settings->sessionTimeout);
+        $this->assertSame($originalMaxFailedAttempts, $settings->maxFailedAttempts);
+        $this->assertSame($originalAllowNegativeStock, $settings->allowNegativeStock);
+        $this->assertSame('default', $settings->id);
+
+        $this->assertDatabaseMissing('RestaurantSettings', [
+            'id' => 'attacker-controlled-id',
+        ]);
+    }
+
+    public function test_settings_update_cannot_change_singleton_id(): void
+    {
+        \App\Models\RestaurantSettings::where('id', 'attacker-controlled-id')->delete();
+
+        $response = $this->withHeaders(['Authorization' => "Bearer {$this->ownerToken}"])
+            ->putJson('/api/settings', [
+                'id' => 'attacker-controlled-id',
+                'name' => 'Security Audit Settings',
+            ]);
+
+        $response->assertStatus(200);
+
+        $this->assertDatabaseHas('RestaurantSettings', [
+            'id' => 'default',
+            'name' => 'Security Audit Settings',
+        ]);
+
+        $this->assertDatabaseMissing('RestaurantSettings', [
+            'id' => 'attacker-controlled-id',
+        ]);
+    }
+
     public function test_coupon_and_banner_status_toggle(): void
     {
         Coupon::where('code', 'like', 'AUDIT_%')->orWhere('code', 'AUDITTEST10')->delete();
