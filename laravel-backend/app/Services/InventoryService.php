@@ -419,6 +419,11 @@ class InventoryService
         $discount = (float)($dto['discount'] ?? 0);
         $tax = (float)($dto['tax'] ?? 0);
         $otherCharges = (float)($dto['otherCharges'] ?? 0);
+
+        if ($discount > $calculatedSubtotal) {
+            throw new \Exception('Purchase discount cannot exceed the calculated subtotal.', 400);
+        }
+
         $grandTotal = $calculatedSubtotal - $discount + $tax + $otherCharges;
 
         return DB::transaction(function () use ($dto, $userId, $purchaseNumber, $calculatedSubtotal, $discount, $tax, $otherCharges, $grandTotal, $validatedItems) {
@@ -901,6 +906,16 @@ class InventoryService
             $allowNegative = $settings ? (bool)$settings->allowNegativeStock : true;
 
             $qtyChange = (float)$dto['quantityChange'];
+            $type = $dto['type'] ?? null;
+
+            if ($type === 'ADJUSTMENT_IN' && $qtyChange <= 0) {
+                throw new \Exception('ADJUSTMENT_IN quantity must be greater than zero.', 400);
+            }
+
+            if ($type === 'ADJUSTMENT_OUT' && $qtyChange >= 0) {
+                throw new \Exception('ADJUSTMENT_OUT quantity must be less than zero.', 400);
+            }
+
             $balanceBefore = (float)$ing->currentStock;
             $balanceAfter = $balanceBefore + $qtyChange;
 
@@ -911,7 +926,7 @@ class InventoryService
             $avgCost = (float)$ing->averageCost;
             $totalCostSnapshot = $qtyChange * $avgCost;
 
-            $txType = ($dto['type'] === 'ADJUSTMENT_IN') ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT';
+            $txType = $type;
 
             $st = StockTransaction::create([
                 'id' => (string)Str::uuid(),

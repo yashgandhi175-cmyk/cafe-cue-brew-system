@@ -261,6 +261,54 @@ class Phase34InventoryStockTest extends TestCase
     // 19-22. WASTAGE, ADJUSTMENT & LEDGER
     // ==========================================
 
+    public function test_purchase_discount_cannot_exceed_subtotal(): void
+    {
+        $ing = Ingredient::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Purchase Discount Guard ' . Str::random(8),
+            'unit' => 'KG',
+            'currentStock' => 10.0,
+            'averageCost' => 500.00,
+        ]);
+
+        $supplier = Supplier::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Discount Guard Supplier ' . Str::random(8),
+            'phone' => '9' . str_pad((string)random_int(100000000, 999999999), 9, '0', STR_PAD_LEFT),
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)
+            ->postJson('/api/inventory/purchases', [
+                'supplierId' => $supplier->id,
+                'discount' => 1001.00,
+                'items' => [
+                    [
+                        'ingredientId' => $ing->id,
+                        'purchaseUnit' => 'KG',
+                        'purchaseQuantity' => 1.0,
+                        'conversionFactor' => 1.0,
+                        'unitPurchaseCost' => 1000.00,
+                    ],
+                ],
+            ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'message' => 'Purchase discount cannot exceed the calculated subtotal.',
+                'statusCode' => 400,
+            ]);
+
+        $this->assertDatabaseMissing('Purchase', [
+            'supplierId' => $supplier->id,
+        ]);
+
+        PurchaseItem::where('ingredientId', $ing->id)->delete();
+        Purchase::where('supplierId', $supplier->id)->delete();
+        StockTransaction::where('ingredientId', $ing->id)->delete();
+        $ing->delete();
+        $supplier->delete();
+    }
+
     public function test_wastage_adjustment_and_ledger_correctness()
     {
         $ing = Ingredient::create(['id' => (string)Str::uuid(), 'name' => 'Syrup P34 ' . Str::random(8), 'unit' => 'BOTTLE', 'currentStock' => 20.0, 'averageCost' => 200.00]);
@@ -296,6 +344,87 @@ class Phase34InventoryStockTest extends TestCase
     // ==========================================
     // 23-25. AUTHORIZATION & ROLE RESTRICTIONS
     // ==========================================
+
+    public function test_adjustment_in_rejects_negative_quantity(): void
+    {
+        $ing = Ingredient::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Adjustment Sign In ' . Str::random(8),
+            'unit' => 'KG',
+            'currentStock' => 10.0,
+            'averageCost' => 100.00,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)
+            ->postJson('/api/inventory/adjust', [
+                'ingredientId' => $ing->id,
+                'quantityChange' => -5.0,
+                'type' => 'ADJUSTMENT_IN',
+                'reason' => 'Invalid sign test',
+            ]);
+
+        $response->assertStatus(400);
+
+        $ing->refresh();
+        $this->assertSame(10.0, (float)$ing->currentStock);
+
+        StockTransaction::where('ingredientId', $ing->id)->delete();
+        $ing->delete();
+    }
+
+    public function test_adjustment_out_rejects_positive_quantity(): void
+    {
+        $ing = Ingredient::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Adjustment Sign Out ' . Str::random(8),
+            'unit' => 'KG',
+            'currentStock' => 10.0,
+            'averageCost' => 100.00,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)
+            ->postJson('/api/inventory/adjust', [
+                'ingredientId' => $ing->id,
+                'quantityChange' => 5.0,
+                'type' => 'ADJUSTMENT_OUT',
+                'reason' => 'Invalid sign test',
+            ]);
+
+        $response->assertStatus(400);
+
+        $ing->refresh();
+        $this->assertSame(10.0, (float)$ing->currentStock);
+
+        StockTransaction::where('ingredientId', $ing->id)->delete();
+        $ing->delete();
+    }
+
+    public function test_adjustment_rejects_zero_quantity(): void
+    {
+        $ing = Ingredient::create([
+            'id' => (string)Str::uuid(),
+            'name' => 'Adjustment Zero ' . Str::random(8),
+            'unit' => 'KG',
+            'currentStock' => 10.0,
+            'averageCost' => 100.00,
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer ' . $this->ownerToken)
+            ->postJson('/api/inventory/adjust', [
+                'ingredientId' => $ing->id,
+                'quantityChange' => 0,
+                'type' => 'ADJUSTMENT_IN',
+                'reason' => 'Zero quantity test',
+            ]);
+
+        $response->assertStatus(422);
+
+        $ing->refresh();
+        $this->assertSame(10.0, (float)$ing->currentStock);
+
+        StockTransaction::where('ingredientId', $ing->id)->delete();
+        $ing->delete();
+    }
 
     public function test_inventory_authorization_role_restrictions()
     {

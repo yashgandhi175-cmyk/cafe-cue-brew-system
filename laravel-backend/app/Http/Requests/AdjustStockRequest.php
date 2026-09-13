@@ -12,7 +12,7 @@ class AdjustStockRequest extends FormRequest
     {
         return [
             'ingredientId' => 'required|string|exists:Ingredient,id',
-            'quantityChange' => 'required|numeric',
+            'quantityChange' => 'required|numeric|not_in:0',
             'type' => 'required|string|in:ADJUSTMENT_IN,ADJUSTMENT_OUT',
             'reason' => 'nullable|string',
         ];
